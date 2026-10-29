@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseCsv, parseAmount, parseDate, decodeText, merchant, categorize, displayName, parseStatement, mergeTx, monthly, subscriptionStats, suggestions, alerts, SERVICES, unusualCharges, checklist, chosenCategory, yearSummary, categoryMatrix, budgetStatus, suggestBudgets, goalPlan, contributions, paidInUntil, accountValueAt, accountStats, netWorthSeries, salaryPayer, incomeBreakdown } from './logic.js'
+import { parseCsv, parseAmount, parseDate, decodeText, merchant, categorize, displayName, parseStatement, mergeTx, monthly, subscriptionStats, suggestions, alerts, SERVICES, unusualCharges, checklist, chosenCategory, yearSummary, categoryMatrix, budgetStatus, suggestBudgets, goalPlan, contributions, paidInUntil, accountValueAt, accountStats, netWorthSeries, salaryPayer, incomeBreakdown, latePayments, withMoves, txKey, planInfo } from './logic.js'
 
 const tx = (date, text, amount, balance = 0) => ({ date, text, amount, balance })
 const svc = (name) => ({ ...SERVICES.find((s) => s.name === name), cycle: 'månad' })
@@ -265,4 +265,39 @@ test('number, date and text decoding helpers', () => {
   assert.ok(Number.isNaN(parseAmount('x')))
   assert.deepEqual([parseDate('30.09.2026'), parseDate(46295), parseDate('Summa')], ['2026-09-30', '2026-09-30', null])
   assert.equal(decodeText(new Uint8Array([0x53, 0x77, 0x69, 0x73, 0x68, 0x20, 0x66, 0x72, 0xe5, 0x6e])), 'Swish från') // Windows-1252 å
+})
+
+test('a late rent payment is suggested for the month before, and moving it fixes both months', () => {
+  const rent = (date) => ({ date, text: 'HYRA BRF', amount: -7800, balance: null, seq: date })
+  const txs = [rent('2026-07-28'), rent('2026-08-27'), { date: '2026-09-15', text: 'ICA', amount: -300, balance: null, seq: 1 }, rent('2026-10-02'), rent('2026-10-28')]
+  const late = latePayments(txs, '2026-10')
+  assert.equal(late.length, 1)
+  assert.equal(late[0].tx.date, '2026-10-02')
+  assert.equal(late[0].to, '2026-09')
+  const moved = withMoves(txs, { [txKey(late[0].tx)]: '2026-09' })
+  const rows = Object.fromEntries(monthly(moved, {}).map((r) => [r.month, r.spending]))
+  assert.equal(rows['2026-09'], 8100)
+  assert.equal(rows['2026-10'], 7800)
+  assert.equal(latePayments(moved, '2026-10').length, 0)
+  // choosing to keep it in October also stops the suggestion
+  assert.equal(latePayments(withMoves(txs, { [txKey(late[0].tx)]: '2026-10' }), '2026-10').length, 0)
+})
+
+test('planInfo finds the plan from the price and what switching saves', () => {
+  const [s] = subscriptionStats([tx('2026-09-03', 'NETFLIX.COM', -169), tx('2026-10-03', 'NETFLIX.COM', -169)], [svc('Netflix')])
+  const p = planInfo(s)
+  assert.equal(p.current, 'Standard')
+  assert.equal(p.guessed, true)
+  assert.equal(p.paid, 338)
+  assert.deepEqual(p.plans.map((x) => x.perYear), [-480, 0, 600])
+  // a plan you picked yourself wins over the guess, and unknown prices give no guess
+  assert.equal(planInfo({ ...s, plan: 'Premium' }).current, 'Premium')
+  assert.equal(planInfo({ ...s, monthlyCost: 150, price: 150 }).current, null)
+  // services without plan data, like Telia, give nothing
+  assert.equal(planInfo({ ...svc('Telia'), price: 399, monthlyCost: 399, prices: [399] }), null)
+})
+
+test('planInfo shows the saving from yearly billing', () => {
+  const [s] = subscriptionStats([tx('2026-10-03', 'HBOMAX', -149)], [svc('HBO Max')])
+  assert.equal(planInfo(s).yearlySaving, 298)
 })

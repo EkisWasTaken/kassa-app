@@ -8,7 +8,7 @@ const props = defineProps({ data: Object })
 const emit = defineEmits(['add-account', 'update-account', 'remove-account'])
 
 const TYPES = ['ISK', 'Sparkonto', 'Aktie- & fondkonto', 'Pension', 'Krypto', 'Annat']
-const COLORS = ['var(--accent)', 'var(--good)', 'var(--warm)', '#8FA2FF', '#D9C8F5', '#FFB38A']
+const COLORS = ['var(--accent)', 'var(--good)', 'var(--warm)', 'var(--c4)', 'var(--c6)', 'var(--c5)']
 const thisMonth = new Date().toISOString().slice(0, 7)
 const num = (v) => Math.round(Number(String(v ?? '').replace(/\s/g, '').replace(',', '.')))
 const signed = (n) => (n > 0 ? '+' : '') + fmt(n)
@@ -51,7 +51,7 @@ const allocation = computed(() => {
 })
 const allocOption = computed(() => ({
   tooltip: { formatter: (p) => `${p.name}: ${kr(p.value)} (${p.percent} %)` },
-  color: [...COLORS, 'var(--chart-neutral)', '#B9B9C2'],
+  color: [...COLORS, 'var(--chart-neutral)', 'var(--faint)'],
   legend: { bottom: 0, icon: 'roundRect', itemWidth: 10, itemHeight: 10, textStyle: { color: 'var(--muted)', fontWeight: 600 } },
   series: [{ type: 'pie', radius: ['50%', '78%'], center: ['50%', '42%'], itemStyle: { borderColor: 'var(--card)', borderWidth: 3, borderRadius: 6 },
     label: { show: false }, emphasis: { label: { show: true, position: 'center', formatter: '{d} %', fontSize: 20, fontWeight: 700, color: 'var(--ink)' } }, data: allocation.value }],
@@ -182,7 +182,7 @@ function addAccount() {
 
 <style scoped>
 .ticker { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-.tick { background: var(--card); border-radius: 20px; padding: 16px 20px; display: flex; flex-direction: column; gap: 4px; }
+.tick { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px 20px; display: flex; flex-direction: column; gap: 4px; }
 .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .span2 { grid-column: span 2; }
 .accounts { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 16px; }

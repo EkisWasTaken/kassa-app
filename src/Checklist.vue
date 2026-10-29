@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { checklist, displayName, merchant, fmt, shortDate, monthLong, txKey, CATEGORIES } from './logic.js'
 
 const props = defineProps({ data: Object, month: String })
-const emit = defineEmits(['go', 'toggle', 'override'])
+const emit = defineEmits(['go', 'toggle', 'override', 'move'])
 
 const checked = computed(() => props.data.checked?.[props.month] ?? [])
 const items = computed(() => checklist(props.data.tx, props.data.overrides, props.data.subs, props.data.dismissed, props.month, props.data.budgets, props.data.accounts)
@@ -38,7 +38,7 @@ const doneCount = computed(() => items.value.filter((i) => i.done).length)
         <label v-if="i.manual && i.count" class="check"><input type="checkbox" :checked="i.done" @change="emit('toggle', month, i.id)"> Jag har kollat</label>
       </div>
     </div>
-    <ul v-if="i.count && (i.items || i.details)" class="list">
+    <ul v-if="i.count && (i.items || i.details || i.late)" class="list">
       <li v-for="t in (i.items || []).slice(0, i.id === 'other' ? 25 : 8)" :key="txKey(t)"><span class="mono muted">{{ shortDate(t.date) }}</span> <b>{{ displayName(t.text) }}</b> <span class="mono">{{ fmt(t.amount) }} kr</span>
         <template v-if="i.id === 'other'">
           <label class="sr-only" :for="'k' + txKey(t)">Kategori för {{ displayName(t.text) }}</label>
@@ -50,6 +50,13 @@ const doneCount = computed(() => items.value.filter((i) => i.done).length)
       </li>
       <li v-if="(i.items || []).length > (i.id === 'other' ? 25 : 8)" class="muted">… och {{ i.items.length - (i.id === 'other' ? 25 : 8) }} till, se Transaktioner</li>
       <li v-for="d in i.details || []" :key="d.title + d.body"><b>{{ d.title }}</b> <span class="muted">{{ d.body }}</span></li>
+      <li v-for="l in i.late || []" :key="txKey(l.tx)" class="late">
+        <span><b>{{ displayName(l.tx.text) }} {{ shortDate(l.tx.date) }}, {{ fmt(-l.tx.amount) }} kr</b> <span class="muted">{{ monthLong(l.to).split(' ')[0] }} saknar betalningen och {{ monthLong(l.from).split(' ')[0].toLowerCase() }} har två. Ska den räknas till {{ monthLong(l.to).split(' ')[0].toLowerCase() }}?</span></span>
+        <span style="display: flex; gap: 6px; flex: none">
+          <button class="btn tiny" @click="emit('move', txKey(l.tx), l.to)">Flytta till {{ monthLong(l.to).split(' ')[0].toLowerCase() }}</button>
+          <button class="btn ghost tiny" @click="emit('move', txKey(l.tx), l.from)">Behåll i {{ monthLong(l.from).split(' ')[0].toLowerCase() }}</button>
+        </span>
+      </li>
     </ul>
   </div>
 </template>
@@ -63,5 +70,7 @@ const doneCount = computed(() => items.value.filter((i) => i.done).length)
 .done .tick { background: var(--good); border-color: var(--good); }
 .btn.small { height: 36px; padding: 0 16px; font-size: 13px; }
 .check { display: flex; gap: 6px; align-items: center; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.late { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.btn.tiny { height: 30px; padding: 0 12px; font-size: 12px; }
 .list { margin: 0 0 0 42px; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
 </style>

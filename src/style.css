@@ -1,58 +1,77 @@
+/* "Kassabok": the Swedish household ledger. Green ruled paper, iron-blue ink, red ink for money out, cloth-bound cover. */
 :root {
-  --ground: #F3F1EC;
-  --card: #FFFFFF;
-  --ink: #16161A;
-  --muted: #5E5E66;
-  --line: #EEEBE4;
-  --accent: #3355FF;
-  --accent-soft: #E4E8FF;
-  --warm: #FF6A2B;
-  --warm-text: #C2410C;
-  --warm-soft: #FFF3EC;
-  --good: #0F9D74;
-  --good-text: #0B7A5A;
-  --good-soft: #E3F4EE;
-  --hero: #16161A;
-  --logo-bg: #16161A;
+  --ground: #E6ECE2;
+  --card: #F9FBF6;
+  --ink: #1A2233;
+  --muted: #56606E;
+  --line: #D9E1D3;
+  --accent: #24489C;
+  --accent-soft: #DDE5F4;
+  --warm: #C0392B;
+  --warm-text: #A12D21;
+  --warm-soft: #F6E3DE;
+  --good: #2E7D5B;
+  --good-text: #22603F;
+  --good-soft: #D9ECE1;
+  --hero: #1E3B30;
+  --hero-ink: #F1F4EC;
+  --hero-muted: #A9BDB1;
+  --cover: #1E3B30;
+  --cover-ink: #C9D8CF;
+  --logo-bg: #F9FBF6;
+  --logo-fg: #1E3B30;
   --input-bg: #FFFFFF;
-  --field-border: #D9D5CC;
-  --link: #2443E0;
-  --flag-bg: #FFE3D6;
-  --flag-text: #8A2E00;
-  --heat-1: #E4E8FF; --heat-2: #B8C3FF; --heat-3: #6F86FF; --heat-4: #1E35C8;
-  --chart-neutral: #16161A;
-  --tile-1: #FFD9C7; --tile-2: #E4E8FF; --tile-3: #EFEDE8; --tile-4: #D7F0E7; --tile-5: #FDE7B0; --tile-6: #EDE7F6; --tile-7: #FCE4EC; --tile-8: #E0F2F1;
-  --mono: 'JetBrains Mono', ui-monospace, monospace;
-  font-family: 'Manrope Variable', Manrope, system-ui, sans-serif;
+  --field-border: #C9D2C3;
+  --link: #24489C;
+  --flag-bg: #F6E3DE;
+  --flag-text: #8A2216;
+  --faint: #A3ABA0;
+  --c4: #6E8FD1; --c5: #C9A227; --c6: #8C6BB1;
+  --heat-1: #DDE5F4; --heat-2: #A9BCE6; --heat-3: #5576C2; --heat-4: #1B3577;
+  --chart-neutral: #1A2233;
+  --tile-1: #F2D6CF; --tile-2: #DDE5F4; --tile-3: #E3E8DD; --tile-4: #CFE6D9; --tile-5: #F1E4B8; --tile-6: #E6DDF0; --tile-7: #F3DCE1; --tile-8: #D3E7E6;
+  --radius: 14px;
+  --mono: inherit;
+  --serif: 'Fraunces Variable', Georgia, serif;
+  font-family: 'Hanken Grotesk Variable', system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.45;
   color: var(--ink);
   background: var(--ground);
   color-scheme: light;
 }
-/* Dark theme: same roles, tuned so text stays at 4.5:1 or better on cards */
+/* Dark: the same book read by lamplight. Text stays at 4.5:1 or better on cards */
 :root[data-theme="dark"] {
-  --ground: #111114;
-  --card: #1B1C21;
-  --ink: #F2F2F5;
-  --muted: #A1A1AB;
-  --line: #2B2C33;
-  --accent: #4361F5; /* white button text stays above 4.5:1 */
-  --accent-soft: #232A4D;
-  --warm: #FF7A3D;
-  --warm-text: #FF9B66;
-  --warm-soft: #2A1F18;
-  --good: #22B88A;
-  --good-text: #4FD1A5;
+  --ground: #0F1714;
+  --card: #17211D;
+  --ink: #E8EDE5;
+  --muted: #9BA79F;
+  --line: #26332D;
+  --accent: #3A5FC4; /* white button text stays above 4.5:1 */
+  --accent-soft: #1F2C4D;
+  --warm: #E2604E;
+  --warm-text: #F08D7D;
+  --warm-soft: #2E1C18;
+  --good: #3FAE80;
+  --good-text: #72CFA4;
   --good-soft: #15302A;
-  --hero: #262730;
-  --logo-bg: #2E3038;
-  --input-bg: #15161A;
-  --field-border: #3A3B44;
-  --link: #8FA2FF;
-  --flag-bg: #4A2614;
-  --flag-text: #FFC4A3;
-  --heat-1: #232A4D; --heat-2: #2E3A7A; --heat-3: #3A4FC0; --heat-4: #5A73FF;
-  --chart-neutral: #5B5C68;
-  --tile-1: #4A2E22; --tile-2: #283055; --tile-3: #2E2F36; --tile-4: #1E3A31; --tile-5: #47391A; --tile-6: #352C4A; --tile-7: #48283A; --tile-8: #1F3B3B;
+  --hero: #1C3A2F;
+  --hero-ink: #F1F4EC;
+  --hero-muted: #A9BDB1;
+  --cover: #0A110E;
+  --cover-ink: #9BA79F;
+  --logo-bg: #E8EDE5;
+  --logo-fg: #0F1714;
+  --input-bg: #111A16;
+  --field-border: #33423A;
+  --link: #9DB3F0;
+  --flag-bg: #4A2219;
+  --flag-text: #FFC2B5;
+  --faint: #5E6B64;
+  --c4: #8FA8E6; --c5: #D8B64A; --c6: #A98ACB;
+  --heat-1: #1F2C4D; --heat-2: #2C4182; --heat-3: #3D5CC0; --heat-4: #7D98EE;
+  --chart-neutral: #6B7A72;
+  --tile-1: #4A2A22; --tile-2: #263252; --tile-3: #26302B; --tile-4: #1C3A2E; --tile-5: #46391A; --tile-6: #33294A; --tile-7: #48283A; --tile-8: #1F3B3B;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -60,21 +79,27 @@ body { margin: 0; background: var(--ground); }
 button, input, select { font: inherit; color: inherit; }
 button { cursor: pointer; }
 a { color: var(--link); }
-h2 { margin: 0; font-size: 18px; font-weight: 700; }
-.mono { font-family: var(--mono); }
+h1, h2 { font-family: var(--serif); font-optical-sizing: auto; }
+h2 { margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -0.01em; }
+.mono, .num { font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
 .muted { color: var(--muted); }
-.card { background: var(--card); border-radius: 28px; padding: 24px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
 .pill { padding: 4px 10px; border-radius: 999px; background: var(--ground); font-size: 12px; font-weight: 600; }
 .pill.unset { background: var(--flag-bg); color: var(--flag-text); }
 .flag { margin-left: 6px; padding: 2px 8px; border-radius: 999px; background: var(--flag-bg); color: var(--flag-text); font-size: 11px; font-weight: 700; }
-.btn { height: 44px; padding: 0 20px; border-radius: 999px; border: 0; background: var(--accent); color: #fff; font-weight: 700; font-size: 14px; }
-.btn.ghost { background: var(--card); color: var(--ink); border: 1px solid var(--field-border); height: 36px; font-size: 13px; }
+.btn { height: 40px; padding: 0 18px; border-radius: 8px; border: 0; background: var(--accent); color: #fff; font-weight: 650; font-size: 14px; }
+.btn:hover:not(:disabled) { filter: brightness(1.1); }
+.btn.ghost { background: var(--card); color: var(--ink); border: 1px solid var(--field-border); height: 34px; font-size: 13px; }
+.btn.ghost:hover { border-color: var(--ink); filter: none; }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 .chart { width: 100%; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
-th { font-weight: 600; color: var(--muted); text-align: left; padding: 6px 0; }
+th { font-weight: 600; font-size: 12px; color: var(--muted); text-align: left; padding: 6px 8px 6px 0; border-bottom: 3px double var(--warm); } /* the ledger's red double rule */
 td { border-top: 1px solid var(--line); padding: 10px 8px 10px 0; }
-.num { text-align: right; font-family: var(--mono); white-space: nowrap; }
+tbody tr:first-child td { border-top: 0; }
+.num { text-align: right; white-space: nowrap; }
+.total { text-decoration: underline double; text-decoration-thickness: 1px; text-underline-offset: 0.18em; } /* bookkeeping total */
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }

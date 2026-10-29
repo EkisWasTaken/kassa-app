@@ -47,7 +47,7 @@ function addDeposit(g) {
 }
 const avgExpenses = computed(() => { const m = monthly(props.data.tx, props.data.overrides); return m.reduce((s, r) => s + r.spending, 0) / Math.max(1, m.length) })
 const rate = ref(Math.round(props.data.goal * 100))
-const barColor =(s) => (s === 'over' ? 'var(--warm)' : s === 'warn' ? '#F5B544' : 'var(--good)')
+const barColor =(s) => (s === 'over' ? 'var(--warm)' : s === 'warn' ? 'var(--c5)' : 'var(--good)')
 </script>
 
 <template>
@@ -150,7 +150,7 @@ const barColor =(s) => (s === 'over' ? 'var(--warm)' : s === 'warn' ? '#F5B544' 
 .amount { width: 90px; border: 1px solid var(--field-border); border-radius: 8px; padding: 4px 8px; text-align: right; background: var(--input-bg); }
 .link-btn { border: 0; background: none; color: var(--link); font-weight: 700; font-size: 12px; padding: 0; margin-left: 10px; }
 .goals { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
-.goal { background: var(--ground); border-radius: 20px; padding: 18px; display: flex; flex-direction: column; gap: 10px; }
+.goal { background: var(--ground); border-radius: 10px; padding: 18px; display: flex; flex-direction: column; gap: 10px; }
 .goal.done { background: var(--good-soft); }
 .goal.new label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
 .goal.new input { border: 1px solid var(--field-border); border-radius: 8px; padding: 8px 10px; background: var(--input-bg); color: var(--ink); font-size: 14px; }

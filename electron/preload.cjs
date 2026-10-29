@@ -10,4 +10,5 @@ contextBridge.exposeInMainWorld('api', {
   restore: () => ipcRenderer.invoke('restore'),
   getTheme: () => ipcRenderer.invoke('getTheme'),
   setTheme: (t) => ipcRenderer.invoke('setTheme', t),
+  openExternal: (url) => ipcRenderer.invoke('openExternal', url),
 })

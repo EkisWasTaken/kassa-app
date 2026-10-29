@@ -46,9 +46,9 @@ const ticker = computed(() => {
   const c = cur.value, p = prev.value || {}
   const avgIncome = totalIncome.value / mon.value.length
   return [
-    { l: `Inkomst · ${monthShort(props.month)}`, v: fmt(c.income), d: incomeNote.value || delta(c.income, p.income), c: 'var(--muted)' },
-    { l: `Utgifter · ${monthShort(props.month)}`, v: fmt(c.spending), d: delta(c.spending, p.spending), c: c.spending > (p.spending ?? Infinity) ? 'var(--warm-text)' : 'var(--good-text)' },
-    { l: `Resultat · ${monthShort(props.month)}`, v: signed(c.saved), d: `${mon.value.length} mån: ${signed(totalSaved.value)}`, c: c.saved < 0 ? 'var(--warm-text)' : 'var(--good-text)' },
+    { l: `Inkomst i ${monthShort(props.month)}`, v: fmt(c.income), d: incomeNote.value || delta(c.income, p.income), c: 'var(--muted)' },
+    { l: `Utgifter i ${monthShort(props.month)}`, v: fmt(c.spending), d: delta(c.spending, p.spending), c: c.spending > (p.spending ?? Infinity) ? 'var(--warm-text)' : 'var(--good-text)' },
+    { l: `Resultat i ${monthShort(props.month)}`, v: signed(c.saved), d: `${mon.value.length} mån: ${signed(totalSaved.value)}`, c: c.saved < 0 ? 'var(--warm-text)' : 'var(--good-text)' },
     { l: 'Fasta kostnader / mån', v: fmt(fixedCost.value), d: props.data.subs.length ? `${Math.round(fixedCost.value / avgIncome * 100)} % av inkomsten` : 'bekräfta under Prenumerationer', c: 'var(--muted)' },
     { l: 'Kassa + investerat', v: fmt((txs.value.at(-1)?.balance ?? 0) + invested.value), d: 'investerat till insatt belopp', c: 'var(--good-text)' },
   ]
@@ -65,7 +65,7 @@ const heroOption = computed(() => {
     yAxis: { type: 'value', show: false, scale: true },
     tooltip: { trigger: 'axis', valueFormatter: kr },
     series: [{ name: 'Sparat hittills', type: 'line', smooth: true, symbol: 'none', data: mon.value.map((r) => (run += r.saved)),
-      lineStyle: { color: '#8FA2FF', width: 3 }, areaStyle: { color: 'rgba(51,85,255,.3)' } }],
+      lineStyle: { color: 'var(--hero-ink)', width: 2 }, areaStyle: { color: 'var(--hero-muted)', opacity: 0.18 } }],
   }
 })
 
@@ -101,7 +101,7 @@ const fallOption = computed(() => {
         const below = b.v < 0 && i === bars.length - 1
         return { type: 'group', children: [
           { type: 'rect', shape: { x: lo[0] - w / 2, y: hi[1], width: w, height: Math.max(lo[1] - hi[1], 2), r: 10 }, style: { fill: resolveColor(b.color) } }, // renderItem output isn't passed through Chart's var() lookup
-          { type: 'text', style: { text: signed(b.v), x: lo[0], y: below ? lo[1] + 6 : hi[1] - 6, align: 'center', verticalAlign: below ? 'top' : 'bottom', fill: resolveColor('var(--ink)'), font: "600 12px 'JetBrains Mono'" } },
+          { type: 'text', style: { text: signed(b.v), x: lo[0], y: below ? lo[1] + 6 : hi[1] - 6, align: 'center', verticalAlign: below ? 'top' : 'bottom', fill: resolveColor('var(--ink)'), font: "600 12px 'Hanken Grotesk Variable'" } },
         ] }
       },
     }],
@@ -134,7 +134,7 @@ const treeOption = computed(() => {
       itemStyle: { gapWidth: 6, borderRadius: 16, borderColor: 'var(--card)', borderWidth: 0 },
       label: { position: 'insideBottomLeft', padding: 12, formatter: (p) => `{b|${p.name}}\n${fmt(p.value)} kr`, rich: { b: { fontWeight: 700, fontSize: 14, lineHeight: 20 } } },
       data: big.map((c, i) => ({ name: c.category, value: Math.round(c.amount / n),
-        itemStyle: { color: colors[i % colors.length] }, label: { color: i < 2 ? '#fff' : 'var(--ink)' } })) }],
+        itemStyle: { color: colors[i % colors.length] }, label: { color: i < 2 ? 'var(--hero-ink)' : 'var(--ink)' } })) }],
   }
 })
 
@@ -169,8 +169,8 @@ const ringDash = computed(() => { const C = 2 * Math.PI * 62; return `${(C * Mat
 
   <section class="grid">
     <div class="card hero span2">
-      <div style="font-size: 14px; color: #B9B9C2; font-weight: 600">Sparat sedan {{ monthShort(months[0]) }}</div>
-      <div class="big">{{ signed(totalSaved) }} <span>kr</span></div>
+      <div style="font-size: 14px; color: var(--hero-muted); font-weight: 600">Sparat sedan {{ monthShort(months[0]) }}</div>
+      <div class="big"><span class="total">{{ signed(totalSaved) }}</span> <span>kr</span></div>
       <Chart :option="heroOption" :height="90" label="Ackumulerat sparande över tid" style="margin-top: auto" />
     </div>
 
@@ -272,7 +272,7 @@ const ringDash = computed(() => { const C = 2 * Math.PI * 62; return `${(C * Mat
       <div class="row"><h2>Prenumerationer</h2><span class="mono muted" style="font-size: 13px">{{ fmt(sum(subs.map((s) => s.monthlyCost)) * 12) }}/år</span></div>
       <div v-for="s in subs" :key="s.name" class="sub">
         <span style="font-size: 13px; font-weight: 600">{{ s.name }}</span>
-        <Spark :values="s.prices" :color="s.price > Math.min(...s.prices) ? 'var(--warm)' : '#B9B9C2'" />
+        <Spark :values="s.prices" :color="s.price > Math.min(...s.prices) ? 'var(--warm)' : 'var(--faint)'" />
         <span class="mono" :style="{ fontSize: '13px', textAlign: 'right', color: s.price > Math.min(...s.prices) ? 'var(--warm-text)' : 'var(--ink)' }">{{ fmt(s.price) }}</span>
       </div>
       <div v-if="!subs.length" class="muted" style="font-size: 13px">Inga bekräftade än. <a href="#" @click.prevent="$emit('go-subs')">Granska förslagen →</a></div>
@@ -287,19 +287,19 @@ const ringDash = computed(() => { const C = 2 * Math.PI * 62; return `${(C * Mat
 
 <style scoped>
 .ticker { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
-.tick { background: var(--card); border-radius: 20px; padding: 16px 20px; display: flex; flex-direction: column; gap: 4px; }
+.tick { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px 20px; display: flex; flex-direction: column; gap: 4px; }
 .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
 .span2 { grid-column: span 2; } .span3 { grid-column: span 3; } .span4 { grid-column: span 4; }
-.hero { background: var(--hero); color: #fff; min-height: 250px; }
-.big { font-size: 64px; font-weight: 800; letter-spacing: -0.04em; line-height: 1; }
-.big span { font-size: 28px; color: #B9B9C2; }
+.hero { background: var(--hero); color: var(--hero-ink); border-color: var(--hero); min-height: 250px; }
+.big { font-family: var(--serif); font-optical-sizing: auto; font-variant-numeric: lining-nums tabular-nums; font-size: 68px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.05; }
+.big span:last-child { font-size: 28px; color: var(--hero-muted); }
 .ring-label { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 12px; }
-.ring-label b { font-size: 34px; font-weight: 800; }
+.ring-label b { font-family: var(--serif); font-size: 34px; font-weight: 600; }
 .heat-legend { display: flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; }
 .heat-legend i { width: 14px; height: 14px; border-radius: 4px; }
 .incoming summary { cursor: pointer; font-size: 13px; font-weight: 700; color: var(--link); }
 .btn.small { height: 32px; padding: 0 14px; font-size: 12px; }
-.alert { background: var(--card); border-radius: 16px; padding: 12px 14px; border: 0; text-align: left; }
+.alert { background: var(--card); border-radius: 10px; padding: 12px 14px; border: 0; text-align: left; }
 .legend { display: flex; gap: 14px; font-size: 13px; }
 .legend span { display: flex; align-items: center; gap: 6px; }
 .legend i { width: 10px; height: 10px; border-radius: 5px; }

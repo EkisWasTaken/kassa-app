@@ -8,8 +8,8 @@ const el = ref()
 let chart, ro
 
 const base = {
-  textStyle: { fontFamily: "'Manrope Variable', Manrope, sans-serif", color: 'var(--muted)' },
-  tooltip: { backgroundColor: '#16161A', borderColor: '#3A3B44', textStyle: { color: '#fff', fontSize: 12 } },
+  textStyle: { fontFamily: "'Hanken Grotesk Variable', sans-serif", color: 'var(--muted)' },
+  tooltip: { backgroundColor: 'var(--hero)', borderWidth: 0, padding: [8, 12], textStyle: { color: 'var(--hero-ink)', fontSize: 13 } },
 }
 const render = () => chart?.setOption(resolveDeep({ ...base, ...props.option }), true)
 

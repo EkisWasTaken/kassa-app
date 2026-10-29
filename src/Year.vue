@@ -5,7 +5,7 @@ import { yearSummary, categoryMatrix, yearsIn, fmt } from './logic.js'
 
 const props = defineProps({ data: Object })
 const MONTHS = ['jan', 'feb', 'mar', 'apr', 'maj', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec']
-const COLORS = ['var(--chart-neutral)', 'var(--accent)', 'var(--warm)', '#FFB38A', '#8FA2FF', '#D9C8F5', '#B9B9C2'] // green is kept for the income line
+const COLORS = ['var(--chart-neutral)', 'var(--accent)', 'var(--warm)', 'var(--c5)', 'var(--c4)', 'var(--c6)', 'var(--faint)'] // green is kept for the income line
 
 const years = computed(() => yearsIn(props.data.tx))
 const year = ref(+years.value.at(-1))
@@ -56,7 +56,7 @@ const savedOption = computed(() => ({
   xAxis: { ...axis, boundaryGap: false }, yAxis: valueAxis,
   series: [
     { name: String(year.value), type: 'line', smooth: true, symbol: 'none', data: cumulative(cur.value), lineStyle: { color: 'var(--accent)', width: 3 }, areaStyle: { color: 'rgba(51,85,255,.15)' }, itemStyle: { color: 'var(--accent)' } },
-    ...(hasPrev.value ? [{ name: String(year.value - 1), type: 'line', smooth: true, symbol: 'none', data: cumulative(prev.value), lineStyle: { color: '#B9B9C2', width: 2, type: 'dashed' }, itemStyle: { color: '#B9B9C2' } }] : []),
+    ...(hasPrev.value ? [{ name: String(year.value - 1), type: 'line', smooth: true, symbol: 'none', data: cumulative(prev.value), lineStyle: { color: 'var(--faint)', width: 2, type: 'dashed' }, itemStyle: { color: 'var(--faint)' } }] : []),
   ],
 }))
 </script>
@@ -124,7 +124,7 @@ const savedOption = computed(() => ({
 
 <style scoped>
 .ticker { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
-.tick { background: var(--card); border-radius: 20px; padding: 16px 20px; display: flex; flex-direction: column; gap: 4px; }
+.tick { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px 20px; display: flex; flex-direction: column; gap: 4px; }
 .matrix td, .matrix th { padding-left: 10px; font-size: 12px; }
 .matrix .sum td { font-weight: 700; border-top: 2px solid var(--ink); }
 @media (max-width: 1100px) { .ticker { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

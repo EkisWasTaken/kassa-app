@@ -12,7 +12,7 @@ import Investments from './Investments.vue'
 import Logo from './Logo.vue'
 
 const TABS = ['Översikt', 'Månadskoll', 'Budget', 'Investeringar', 'År', 'Transaktioner', 'Prenumerationer', 'Inställningar']
-import { parseStatement, parseCsv, decodeText, mergeTx, monthsIn, monthLong, checklist } from './logic.js'
+import { parseStatement, parseCsv, decodeText, mergeTx, monthsIn, monthLong, checklist, withMoves } from './logic.js'
 
 // Electron saves to a JSON file via preload; plain browser (vite dev preview) falls back to localStorage.
 const store = window.api ?? {
@@ -24,7 +24,7 @@ const OLD_CATS = { Housing: 'Boende', 'Insurance & loans': 'Försäkring & lån'
   'Phone & internet': 'Telefon & internet', 'Clubs & fitness': 'Föreningar & träning', Food: 'Mat', Restaurants: 'Restaurang & café',
   Travel: 'Resor', Bills: 'Räkningar', Transfer: 'Överföring', Other: 'Övrigt' }
 
-const EMPTY = () => ({ tx: [], overrides: {}, goal: 0.15, subs: [], dismissed: [], checked: {}, budgets: {}, goals: [], accounts: [] })
+const EMPTY = () => ({ tx: [], overrides: {}, goal: 0.15, subs: [], dismissed: [], checked: {}, budgets: {}, goals: [], accounts: [], moves: {} })
 const data = ref(EMPTY())
 const loaded = ref(false)
 const loadError = ref('')
@@ -34,7 +34,9 @@ const query = ref('')
 const month = ref('')
 const fileInput = ref()
 
-const months = computed(() => monthsIn(data.value.tx))
+// What every view reads: transactions with their chosen month applied (data.moves: txKey -> 'YYYY-MM')
+const view = computed(() => ({ ...data.value, tx: withMoves(data.value.tx, data.value.moves) }))
+const months = computed(() => monthsIn(view.value.tx))
 
 onMounted(async () => {
   try {
@@ -103,11 +105,12 @@ const removeGoal = (i) => change((d) => { d.goals.splice(i, 1) })
 const addAccount = (a) => change((d) => { d.accounts.push(a) })
 const updateAccount = (i, patch) => change((d) => { Object.assign(d.accounts[i], patch) })
 const removeAccount = (i) => change((d) => { d.accounts.splice(i, 1) })
+const setMove = (key, m) => change((d) => { const { [key]: _, ...rest } = d.moves; d.moves = m ? { ...rest, [key]: m } : rest })
 
 const openItems = computed(() => {
   if (!month.value) return 0
   const done = data.value.checked[month.value] ?? []
-  return checklist(data.value.tx, data.value.overrides, data.value.subs, data.value.dismissed, month.value, data.value.budgets, data.value.accounts)
+  return checklist(view.value.tx, data.value.overrides, data.value.subs, data.value.dismissed, month.value, data.value.budgets, data.value.accounts)
     .filter((i) => i.count && !(i.manual && done.includes(i.id))).length
 })
 
@@ -125,7 +128,7 @@ function search() { if (query.value) tab.value = 'Transaktioner' }
   </header>
 
   <div class="toolbar">
-    <h1>{{ tab }}<span v-if="month && !['Inställningar', 'År', 'Investeringar', 'Prenumerationer'].includes(tab)" class="muted"> · {{ monthLong(month) }}</span></h1>
+    <h1>{{ tab }}<span v-if="month && !['Inställningar', 'År', 'Investeringar', 'Prenumerationer'].includes(tab)" class="muted">&nbsp;{{ monthLong(month).toLowerCase() }}</span></h1>
       <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap">
         <label v-if="months.length" class="field">
           <span class="sr-only">Månad</span>
@@ -160,13 +163,13 @@ function search() { if (query.value) tab.value = 'Transaktioner' }
       <button v-if="tab === 'Översikt' && openItems" class="banner nudge" @click="tab = 'Månadskoll'">
         <b>Månadskoll för {{ monthLong(month).toLowerCase() }}:</b> {{ openItems }} {{ openItems === 1 ? 'sak' : 'saker' }} kvar att gå igenom →
       </button>
-      <Overview v-if="tab === 'Översikt'" :data="data" :month="month" @show-all="query = ''; tab = 'Transaktioner'" @go-subs="tab = 'Prenumerationer'" @go-invest="tab = 'Investeringar'" @override="setOverride" />
-      <Checklist v-else-if="tab === 'Månadskoll'" :data="data" :month="month" @go="go" @toggle="toggleChecked" @override="setOverride" />
-      <Year v-else-if="tab === 'År'" :data="data" />
-      <Investments v-else-if="tab === 'Investeringar'" :data="data" @add-account="addAccount" @update-account="updateAccount" @remove-account="removeAccount" />
-      <Budget v-else-if="tab === 'Budget'" :data="data" :month="month" @set-budgets="setBudgets" @set-rate="setRate" @add-goal="addGoal" @update-goal="updateGoal" @remove-goal="removeGoal" />
-      <Transactions v-else-if="tab === 'Transaktioner'" :txs="data.tx" :overrides="data.overrides" :query="query" :month="month" @override="setOverride" />
-      <Subscriptions v-else-if="tab === 'Prenumerationer'" :data="data" @add="addSub" @dismiss="dismiss" @undismiss="undismiss" @update="updateSub" @remove="removeSub" />
+      <Overview v-if="tab === 'Översikt'" :data="view" :month="month" @show-all="query = ''; tab = 'Transaktioner'" @go-subs="tab = 'Prenumerationer'" @go-invest="tab = 'Investeringar'" @override="setOverride" />
+      <Checklist v-else-if="tab === 'Månadskoll'" :data="view" :month="month" @go="go" @toggle="toggleChecked" @override="setOverride" @move="setMove" />
+      <Year v-else-if="tab === 'År'" :data="view" />
+      <Investments v-else-if="tab === 'Investeringar'" :data="view" @add-account="addAccount" @update-account="updateAccount" @remove-account="removeAccount" />
+      <Budget v-else-if="tab === 'Budget'" :data="view" :month="month" @set-budgets="setBudgets" @set-rate="setRate" @add-goal="addGoal" @update-goal="updateGoal" @remove-goal="removeGoal" />
+      <Transactions v-else-if="tab === 'Transaktioner'" :txs="view.tx" :overrides="data.overrides" :query="query" :month="month" @override="setOverride" @move="setMove" />
+      <Subscriptions v-else-if="tab === 'Prenumerationer'" :data="view" @add="addSub" @dismiss="dismiss" @undismiss="undismiss" @update="updateSub" @remove="removeSub" />
     </template>
   </main>
 </template>
@@ -178,26 +181,27 @@ function search() { if (query.value) tab.value = 'Transaktioner' }
 .titlebar {
   position: sticky; top: 0; z-index: 10; height: 56px; display: flex; align-items: center; gap: 28px;
   padding: 0 calc(100vw - env(titlebar-area-width, 100vw) + 16px) 0 20px; /* leaves room for the window buttons */
-  background: var(--card); border-bottom: 1px solid var(--line); -webkit-app-region: drag; user-select: none;
+  background: var(--cover); color: var(--cover-ink); -webkit-app-region: drag; user-select: none;
 }
-.brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 20px; letter-spacing: -0.03em; flex: none; }
-.brand i { font-style: normal; color: var(--accent); }
-.tabs { display: flex; gap: 2px; height: 100%; overflow-x: auto; scrollbar-width: none; -webkit-app-region: no-drag; }
-.tabs button { position: relative; border: 0; background: transparent; padding: 0 14px; color: var(--muted); font-weight: 600; font-size: 14px; white-space: nowrap; }
-.tabs button:hover { color: var(--ink); }
-.tabs button.on { color: var(--ink); }
-.tabs button.on::after { content: ''; position: absolute; left: 14px; right: 14px; bottom: 0; height: 3px; border-radius: 3px 3px 0 0; background: var(--accent); }
+.brand { display: flex; align-items: center; gap: 10px; font-family: var(--serif); font-weight: 650; font-size: 21px; letter-spacing: -0.02em; color: var(--hero-ink); flex: none; }
+.brand i { font-style: normal; color: var(--warm); }
+.tabs { display: flex; align-items: flex-end; gap: 2px; height: 100%; overflow-x: auto; scrollbar-width: none; -webkit-app-region: no-drag; }
+.tabs button { position: relative; border: 0; background: transparent; height: 40px; padding: 0 14px; border-radius: 10px 10px 0 0; color: inherit; font-weight: 600; font-size: 14px; white-space: nowrap; }
+.tabs button:hover { color: var(--hero-ink); background: color-mix(in srgb, var(--ground) 10%, transparent); }
+.tabs button.on { color: var(--ink); background: var(--ground); } /* an index tab cut into the cover */
+.tabs button:focus-visible { outline-color: var(--hero-ink); outline-offset: -3px; }
 
 .toolbar {
   position: sticky; top: 56px; z-index: 9; display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;
   max-width: 1600px; margin: 0 auto; padding: 18px 40px; background: color-mix(in srgb, var(--ground) 88%, transparent); backdrop-filter: blur(10px);
 }
-.toolbar h1 { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.03em; }
-.toolbar h1 .muted { font-weight: 600; }
-.field { display: flex; align-items: center; gap: 8px; background: var(--card); border-radius: 999px; padding: 0 16px; height: 44px; font-size: 14px; }
-.banner { background: var(--card); border-radius: 16px; padding: 12px 16px; font-size: 14px; }
-.badge { margin-left: 6px; display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 9px; background: var(--warm); color: #fff; font-size: 11px; font-weight: 800; line-height: 18px; }
-.nudge { border: 0; text-align: left; background: var(--warm-soft); cursor: pointer; }
+.toolbar h1 { margin: 0; font-size: 30px; font-weight: 600; letter-spacing: -0.02em; }
+.toolbar h1 .muted { font-weight: 400; font-style: italic; }
+.field { display: flex; align-items: center; gap: 8px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 0 14px; height: 40px; font-size: 14px; }
+.field:focus-within { border-color: var(--accent); }
+.banner { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; font-size: 14px; }
+.badge { margin-left: 6px; display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 9px; background: var(--warm); color: #fff; font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 18px; }
+.nudge { border-color: transparent; text-align: left; background: var(--warm-soft); cursor: pointer; }
 .link { border: 0; background: none; color: var(--link); font-weight: 700; margin-left: 8px; }
 .empty { max-width: 560px; margin: 80px auto; text-align: center; align-items: center; }
 </style>

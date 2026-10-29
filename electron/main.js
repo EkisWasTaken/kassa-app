@@ -60,9 +60,9 @@ async function backup(label = '') {
   return backupInfo()
 }
 
-// Window colours per theme; they match --card (title bar) and --ground (background) in src/style.css
-const OVERLAY = { light: { color: '#FFFFFF', symbolColor: '#16161A', height: 56 }, dark: { color: '#1B1C21', symbolColor: '#F2F2F5', height: 56 } }
-const GROUND = { light: '#F3F1EC', dark: '#111114' }
+// Window colours per theme; they match --cover (title bar), --hero-ink and --ground (background) in src/style.css
+const OVERLAY = { light: { color: '#1E3B30', symbolColor: '#F1F4EC', height: 56 }, dark: { color: '#0A110E', symbolColor: '#F1F4EC', height: 56 } }
+const GROUND = { light: '#E6ECE2', dark: '#0F1714' }
 const mode = () => (nativeTheme.shouldUseDarkColors ? 'dark' : 'light')
 
 ipcMain.handle('getTheme', async () => (await settings()).theme ?? 'system')
@@ -73,6 +73,11 @@ ipcMain.handle('setTheme', async (_e, t) => {
 })
 
 ipcMain.handle('load', () => readJson(storeFile()))
+// Account pages for subscriptions open in the user's own browser; only https links, never files or other schemes
+ipcMain.handle('openExternal', (_e, url) => {
+  if (new URL(url).protocol !== 'https:') throw new Error('Bara https-länkar kan öppnas')
+  return shell.openExternal(url)
+})
 ipcMain.handle('save', (_e, data) => writeJson(storeFile(), data))
 ipcMain.handle('backup', () => backup())
 ipcMain.handle('backupInfo', () => backupInfo())

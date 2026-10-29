@@ -1,11 +1,11 @@
-// Draws the Kassa icon (dark rounded square, white "k", blue dot) to build/icon.png.
+// Draws the Kassa icon (ledger-green square, paper "k", red-ink dot) to build/icon.png.
 // No image libraries: shapes are signed-distance functions, antialiased per pixel, written as a PNG with zlib.
 // Run: npm run icon
 import fs from 'node:fs'
 import zlib from 'node:zlib'
 
 const N = 1024
-const INK = [22, 22, 26], WHITE = [255, 255, 255], BLUE = [51, 85, 255]
+const COVER = [30, 59, 48], PAPER = [249, 251, 246], RED = [192, 57, 43] // --cover, --card, --warm in style.css
 
 // Shapes in a 0..1 coordinate space (the same numbers drive the SVG logo in src/Logo.vue)
 const roundedRect = (x, y, r) => { const qx = Math.abs(x - 0.5) - (0.5 - r), qy = Math.abs(y - 0.5) - (0.5 - r); return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - r }
@@ -15,9 +15,9 @@ const circle = (x, y, cx, cy, r) => Math.hypot(x - cx, y - cy) - r
 // Stem, arm, leg. The arm starts on the stem's axis and the leg on the arm's axis, so the round caps hide inside.
 const K = [[0.33, 0.24, 0.33, 0.76], [0.33, 0.6, 0.6, 0.38], [0.47, 0.486, 0.62, 0.76]]
 const layers = [
-  [INK, (x, y) => roundedRect(x, y, 0.22)],
-  [WHITE, (x, y) => Math.min(...K.map(([ax, ay, bx, by]) => capsule(x, y, ax, ay, bx, by, 0.058)))],
-  [BLUE, (x, y) => circle(x, y, 0.75, 0.71, 0.068)],
+  [COVER, (x, y) => roundedRect(x, y, 0.22)],
+  [PAPER, (x, y) => Math.min(...K.map(([ax, ay, bx, by]) => capsule(x, y, ax, ay, bx, by, 0.058)))],
+  [RED, (x, y) => circle(x, y, 0.75, 0.71, 0.068)],
 ]
 
 const px = Buffer.alloc(N * N * 4)

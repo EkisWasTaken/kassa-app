@@ -1,6 +1,7 @@
 // Pure analysis of Länsförsäkringar transactions. No DOM, so it runs under `node --test` too.
 // A transaction is { date: 'YYYY-MM-DD' (booking date), text, amount, balance }.
 // A confirmed recurring cost is { name, match: [UPPERCASE substrings], kind: 'prenumeration'|'fast', cycle: 'månad'|'år', category }.
+import { PLANS } from './plans.js'
 
 // First match wins. Keywords are matched against the upper-cased text.
 export const RULES = [
@@ -192,7 +193,10 @@ export function mergeTx(existing, incoming) {
   return { all: [...existing, ...added].sort((a, b) => a.date.localeCompare(b.date)), added: added.length }
 }
 
-export const monthOf = (t) => t.date.slice(0, 7)
+// A payment can be counted in another month than it was booked (rent paid a few days late). t.month is set from data.moves.
+export const monthOf = (t) => t.month ?? t.date.slice(0, 7)
+export const withMoves = (txs, moves = {}) => txs.map((t) => (moves[txKey(t)] ? { ...t, month: moves[txKey(t)] } : t))
+export const shiftMonth = (m, n) => { const d = new Date(+m.slice(0, 4), +m.slice(5, 7) - 1 + n, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` }
 export const monthsIn = (txs) => [...new Set(txs.map(monthOf))].sort()
 
 export function monthly(txs, overrides) {
@@ -223,7 +227,7 @@ export function daily(txs, overrides, month) {
   const days = new Date(+month.slice(0, 4), +month.slice(5, 7), 0).getDate()
   const out = Array(days).fill(0)
   for (const t of txs) {
-    if (monthOf(t) === month && t.amount < 0 && !NOT_SPENDING.has(categorize(t.text, overrides))) out[+t.date.slice(8, 10) - 1] -= t.amount
+    if (monthOf(t) === month && t.amount < 0 && !NOT_SPENDING.has(categorize(t.text, overrides))) out[t.date.startsWith(month) ? +t.date.slice(8, 10) - 1 : t.date < month ? 0 : days - 1] -= t.amount
   }
   return out
 }
@@ -244,6 +248,20 @@ export function subscriptionStats(txs, subs) {
     const active = !!last && daysBetween(last, end) <= (s.cycle === 'år' ? 400 : 45)
     return { ...s, prices, months, price, last, active, monthlyCost: s.cycle === 'år' ? price / 12 : price }
   })
+}
+
+// Plan details for a confirmed subscription: the plan its price matches (or the one you picked), the other plans
+// with what switching costs or saves per year, and the account links. null for services Kassa has no plan data for.
+export function planInfo(sub) {
+  const svc = SERVICES.find((s) => s.match.some((p) => sub.match.includes(p)))
+  const info = svc && PLANS[svc.name]
+  if (!info) return null
+  const plans = (info.plans ?? []).map(([name, price]) => ({ name, price, perYear: Math.round((price - sub.monthlyCost) * 12) }))
+  const byYear = sub.cycle === 'år' && Object.entries(info.yearly ?? {}).find(([, p]) => Math.abs(p - sub.price) <= 1)?.[0]
+  const current = sub.plan || byYear || plans.find((p) => Math.abs(p.price - sub.monthlyCost) <= 1)?.name || null
+  const yearly = sub.cycle !== 'år' && info.yearly?.[current]
+  return { ...info, service: svc.name, plans, current, guessed: !sub.plan && !!current,
+    yearlySaving: yearly ? Math.round(sub.price * 12 - yearly) : 0, paid: sub.prices.reduce((s, x) => s + x, 0) }
 }
 
 // Things that look recurring but you haven't confirmed or dismissed yet.
@@ -328,6 +346,25 @@ export function unusualCharges(txs, overrides, subs, month, min = 1500) {
   })
 }
 
+// A regular payment (same payee, about the same amount, normally once a month) that is missing one month
+// and comes twice the next was probably paid late. Suggests counting the first one in the month before.
+// Payments you already moved, or chose to keep, have t.month set and are not suggested again.
+export function latePayments(txs, month) {
+  const prev = shiftMonth(month, -1)
+  if (!txs.some((t) => monthOf(t) === prev)) return [] // no data for the month before, so nothing is missing
+  const by = {}
+  for (const t of txs) if (t.amount <= -500) ((by[merchant(t.text)] ??= {})[monthOf(t)] ??= []).push(t)
+  const out = []
+  for (const byMonth of Object.values(by)) {
+    const cur = byMonth[month] ?? []
+    if (cur.length !== 2 || byMonth[prev] || cur.some((t) => t.month)) continue
+    if (Object.values(byMonth).filter((l) => l.length === 1).length < 2) continue // not a monthly payment
+    const [a, b] = cur
+    if (Math.abs(a.amount - b.amount) <= 0.1 * -a.amount) out.push({ tx: a, from: month, to: prev })
+  }
+  return out
+}
+
 // The monthly review: each item is done when nothing is left to look at.
 export function checklist(txs, overrides, subs, dismissed, month, budgets = {}, accounts = []) {
   const monthTx = txs.filter((t) => monthOf(t) === month)
@@ -337,7 +374,9 @@ export function checklist(txs, overrides, subs, dismissed, month, budgets = {}, 
   const unusual = unusualCharges(txs, overrides, subs, month)
   const over = budgetStatus(txs, overrides, budgets, month).filter((b) => b.status === 'over')
   const stale = accounts.filter((a) => !(a.snapshots ?? []).some((s) => s.month >= month))
+  const late = latePayments(txs, month)
   return [
+    { id: 'late', title: 'Betalningar som kom en månad sent', count: late.length, late },
     { id: 'suggest', title: 'Granska förslag på prenumerationer', count: suggestions(txs, subs, dismissed).length, go: 'Prenumerationer' },
     { id: 'other', title: 'Sätt kategori på transaktioner i Övrigt', count: other.length, go: 'Transaktioner', query: 'Övrigt', items: other },
     { id: 'transfer', title: 'Kontrollera möjliga egna överföringar', count: warn.filter((a) => a.kind === 'transfer').length, go: 'Transaktioner', details: warn.filter((a) => a.kind === 'transfer') },
@@ -363,16 +402,16 @@ export function yearSummary(txs, overrides, year) {
 export function categoryMatrix(txs, overrides, year) {
   const out = {}
   for (const t of txs) {
-    if (t.date.slice(0, 4) !== String(year) || t.amount >= 0) continue
+    if (monthOf(t).slice(0, 4) !== String(year) || t.amount >= 0) continue
     const c = categorize(t.text, overrides)
     if (NOT_SPENDING.has(c)) continue
     out[c] ??= Array(12).fill(0)
-    out[c][+t.date.slice(5, 7) - 1] -= t.amount
+    out[c][+monthOf(t).slice(5, 7) - 1] -= t.amount
   }
   return Object.entries(out).map(([category, byMonth]) => ({ category, byMonth, total: byMonth.reduce((s, x) => s + x, 0) })).sort((a, b) => b.total - a.total)
 }
 
-export const yearsIn = (txs) => [...new Set(txs.map((t) => t.date.slice(0, 4)))].sort()
+export const yearsIn = (txs) => [...new Set(txs.map((t) => monthOf(t).slice(0, 4)))].sort()
 
 // How each budgeted category is doing in a month. For the newest month, which may still be running,
 // spending is projected to month end from how far into the month the data goes.
@@ -412,7 +451,7 @@ export function goalPlan(goal, today, avgSavedPerMonth) {
 // Bank balance after the last transaction of each month.
 export function monthEndBalances(txs) {
   const out = {}
-  for (const t of txs) if (t.balance != null) out[monthOf(t)] = t.balance // txs are in date order, so the last one wins
+  for (const t of txs) if (t.balance != null) out[t.date.slice(0, 7)] = t.balance // txs are in date order, so the last one wins
   return out
 }
 
