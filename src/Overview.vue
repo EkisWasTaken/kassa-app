@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import Chart from './Chart.vue'
 import Spark from './Spark.vue'
 import { resolveColor } from './theme.js'
-import { monthly, byCategory, daily, subscriptionStats, alerts, monthsIn, monthOf, displayName, categorize, txKey, fmt, monthShort, shortDate, accountStats, netWorthSeries, incomeBreakdown, CATEGORIES } from './logic.js'
+import { monthly, byCategory, daily, subscriptionStats, alerts, monthsIn, monthOf, displayName, categorize, txKey, fmt, monthShort, shortDate, accountStats, netWorthSeries, incomeBreakdown, forecast, CATEGORIES } from './logic.js'
 
 const props = defineProps({ data: Object, month: String })
 const emit = defineEmits(['show-all', 'go-subs', 'go-invest', 'override'])
@@ -34,6 +34,7 @@ const extraNeeded = computed(() => Math.max(0, (goal.value - rate.value) * total
 const fixedCost = computed(() => sum(stats.value.map((s) => s.monthlyCost)))
 
 const incoming = computed(() => incomeBreakdown(txs.value, ov.value, props.month))
+const ahead = computed(() => forecast(txs.value, ov.value, props.month))
 const incomeNote = computed(() => {
   const by = (k) => sum(incoming.value.filter((r) => r.kind === k).map((r) => r.amount))
   const salary = by('Lön'), other = by('Övrigt')
@@ -189,7 +190,7 @@ const ringDash = computed(() => { const C = 2 * Math.PI * 62; return `${(C * Mat
       </div>
     </div>
 
-    <div class="card" style="background: var(--warm-soft); gap: 10px">
+    <div class="card note" style="gap: 10px">
       <h2>Värt att kolla</h2>
       <component :is="a.kind === 'suggest' ? 'button' : 'div'" v-for="a in warn.slice(0, 4)" :key="a.title + a.body" class="alert" @click="a.kind === 'suggest' && $emit('go-subs')">
         <div style="font-weight: 700; font-size: 14px">{{ a.title }}</div>
@@ -197,6 +198,24 @@ const ringDash = computed(() => { const C = 2 * Math.PI * 62; return `${(C * Mat
         <button v-if="a.kind === 'transfer'" class="btn small" style="margin-top: 8px" @click="emit('override', a.key, 'Överföring')">Markera som överföring</button>
       </component>
       <div v-if="!warn.length" class="muted" style="font-size: 13px">Inget konstigt just nu.</div>
+    </div>
+
+    <div v-if="ahead" class="card span4 forecast">
+      <div>
+        <div class="muted" style="font-size: 14px; font-weight: 600">Prognos för {{ monthShort(month) }}</div>
+        <div class="fc-total" :style="{ color: ahead.total < 0 ? 'var(--warm-text)' : 'var(--good-text)' }">{{ signed(ahead.total) }} kr</div>
+        <div class="muted" style="font-size: 13px">om resten av månaden blir som vanligt</div>
+      </div>
+      <table class="fc-lines">
+        <tbody>
+          <tr><td>Hittills i {{ monthShort(month) }}</td><td class="num">{{ signed(ahead.soFar) }}</td></tr>
+          <tr v-for="l in ahead.left" :key="l.name"><td>{{ l.name }} <span class="muted">brukar komma varje månad</span></td>
+            <td class="num" :style="{ color: l.amount < 0 ? 'var(--warm-text)' : 'var(--good-text)' }">{{ signed(l.amount) }}</td></tr>
+          <tr><td>Vanlig spendering, {{ ahead.daysLeft }} {{ ahead.daysLeft === 1 ? 'dag' : 'dagar' }} kvar <span class="muted">snitt {{ fmt(ahead.perDay) }} kr/dag</span></td>
+            <td class="num" style="color: var(--warm-text)">{{ signed(-ahead.perDay * ahead.daysLeft) }}</td></tr>
+          <tr class="fc-sum"><td>Prognos</td><td class="num total">{{ signed(ahead.total) }}</td></tr>
+        </tbody>
+      </table>
     </div>
 
     <div class="card span2">
@@ -260,7 +279,7 @@ const ringDash = computed(() => { const C = 2 * Math.PI * 62; return `${(C * Mat
             <tr v-for="t in recentTx" :key="txKey(t)">
               <td class="mono muted">{{ shortDate(t.date) }}</td>
               <td style="font-weight: 600">{{ displayName(t.text) }}<span v-if="doubleKeys.has(txKey(t))" class="flag">möjlig dubbelbetalning</span></td>
-              <td><span class="pill">{{ categorize(t.text, ov) }}</span></td>
+              <td><span class="pill">{{ categorize(t, ov) }}</span></td>
               <td class="num">{{ t.amount.toLocaleString('sv-SE', { minimumFractionDigits: 2 }) }}</td>
             </tr>
           </tbody>
@@ -279,7 +298,7 @@ const ringDash = computed(() => { const C = 2 * Math.PI * 62; return `${(C * Mat
     </div>
 
     <div class="card span4">
-      <h2>Vart pengarna går <span class="muted" style="font-weight: 500; font-size: 14px">· snitt per månad</span></h2>
+      <h2>Vart pengarna går <span class="muted">snitt per månad</span></h2>
       <Chart :option="treeOption" :height="220" label="Genomsnittlig månadsspendering per kategori" />
     </div>
   </section>
@@ -299,6 +318,10 @@ const ringDash = computed(() => { const C = 2 * Math.PI * 62; return `${(C * Mat
 .heat-legend i { width: 14px; height: 14px; border-radius: 4px; }
 .incoming summary { cursor: pointer; font-size: 13px; font-weight: 700; color: var(--link); }
 .btn.small { height: 32px; padding: 0 14px; font-size: 12px; }
+.forecast { display: grid; grid-template-columns: minmax(200px, 1fr) minmax(0, 2fr); gap: 32px; align-items: center; }
+.fc-total { font-family: var(--serif); font-variant-numeric: lining-nums tabular-nums; font-size: 44px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; }
+.fc-lines td { font-size: 14px; }
+.fc-sum td { border-top: 3px double var(--ink); font-weight: 700; }
 .alert { background: var(--card); border-radius: 10px; padding: 12px 14px; border: 0; text-align: left; }
 .legend { display: flex; gap: 14px; font-size: 13px; }
 .legend span { display: flex; align-items: center; gap: 6px; }
@@ -308,5 +331,6 @@ const ringDash = computed(() => { const C = 2 * Math.PI * 62; return `${(C * Mat
   .ticker { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .span3, .span4 { grid-column: span 2; }
+  .forecast { grid-template-columns: 1fr; gap: 12px; }
 }
 </style>

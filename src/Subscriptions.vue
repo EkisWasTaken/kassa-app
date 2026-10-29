@@ -21,8 +21,8 @@ const openLink = (url) => (window.api?.openExternal ? window.api.openExternal(ur
 </script>
 
 <template>
-  <div v-if="sugg.length" class="card" style="background: var(--warm-soft)">
-    <div class="row"><h2>Förslag att granska <span class="muted" style="font-weight: 500; font-size: 14px">· {{ sugg.length }} st</span></h2></div>
+  <div v-if="sugg.length" class="card note">
+    <div class="row"><h2>Förslag att granska <span class="muted">{{ sugg.length }} st</span></h2></div>
     <p class="muted" style="margin: 0; font-size: 13px">Bara det du lägger till räknas i statistiken. Det du avvisar föreslås aldrig igen.</p>
     <div style="overflow-x: auto">
       <table>

@@ -1,30 +1,45 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { CATEGORIES, categorize, chosenCategory, merchant, displayName, monthOf, txKey, shiftMonth, monthLong } from './logic.js'
+import { CATEGORIES, categorize, chosenCategory, merchant, displayName, monthOf, txKey, shiftMonth, monthLong, ruleSuggestion, title } from './logic.js'
 
 const props = defineProps({ txs: Array, overrides: Object, query: String, month: String })
-const emit = defineEmits(['override', 'move'])
+const emit = defineEmits(['override', 'move', 'add-rule'])
 const onlyMonth = ref(true)
 
 const rows = computed(() => {
   const q = (props.query || '').toLowerCase()
   return props.txs
-    .filter((t) => (!onlyMonth.value || monthOf(t) === props.month) && (!q || t.text.toLowerCase().includes(q) || displayName(t.text).toLowerCase().includes(q) || categorize(t.text, props.overrides).toLowerCase().includes(q)))
+    .filter((t) => (!onlyMonth.value || monthOf(t) === props.month) && (!q || t.text.toLowerCase().includes(q) || displayName(t.text).toLowerCase().includes(q) || categorize(t, props.overrides).toLowerCase().includes(q)))
     .slice().reverse()
 })
 const total = computed(() => rows.value.reduce((s, t) => s + t.amount, 0))
 const booked = (t) => t.date.slice(0, 7)
 const monthChoices = (t) => [-1, 0, 1].map((n) => shiftMonth(booked(t), n))
 const moved = (t) => monthOf(t) !== booked(t)
+const suggest = ref(null) // { payee, text, category, payees, count } after you change a category
+function setCategory(t, category) {
+  const payee = merchant(t.text)
+  const s = ruleSuggestion(props.txs, props.overrides, payee, category)
+  suggest.value = s && { ...s, payee }
+  emit('override', payee, category)
+}
+function makeRule() { emit('add-rule', { text: suggest.value.text, category: suggest.value.category }); suggest.value = null }
 </script>
 
 <template>
   <div class="card">
     <div class="row">
-      <h2>Transaktioner <span class="muted" style="font-weight: 500; font-size: 14px">· {{ rows.length }} rader · netto {{ Math.round(total).toLocaleString('sv-SE') }} kr</span></h2>
+      <h2>Transaktioner <span class="muted">{{ rows.length }} rader, netto {{ Math.round(total).toLocaleString('sv-SE') }} kr</span></h2>
       <label style="display: flex; gap: 8px; align-items: center; font-size: 14px; font-weight: 600"><input type="checkbox" v-model="onlyMonth"> Bara vald månad</label>
     </div>
     <p class="muted" style="margin: 0; font-size: 13px">Ändrar du kategori gäller det alla transaktioner från den mottagaren, även i framtida importer. Välj "Överföring" för pengar mellan dina egna konton så räknas de inte som inkomst eller utgift. Kom en betalning några dagar sent, till exempel hyran, kan du välja vilken månad den räknas till.</p>
+    <div v-if="suggest" class="suggest note" role="status">
+      <span>Du satte <b>{{ title(suggest.payee) }}</b> till {{ suggest.category }}. Gäller det alla mottagare som innehåller <b>{{ suggest.text }}</b>?</span>
+      <span style="display: flex; gap: 6px; flex: none">
+        <button class="btn small" @click="makeRule">Skapa regel ({{ suggest.count }} st)</button>
+        <button class="btn ghost small" @click="suggest = null">Bara den här</button>
+      </span>
+    </div>
     <div style="overflow-x: auto">
       <table>
         <thead><tr><th>Datum</th><th>Mottagare</th><th>Banktext</th><th>Kategori</th><th>Räknas till</th><th class="num">Belopp</th></tr></thead>
@@ -35,7 +50,7 @@ const moved = (t) => monthOf(t) !== booked(t)
             <td class="muted" style="font-size: 12px">{{ t.text }}</td>
             <td>
               <label class="sr-only" :for="'c' + txKey(t)">Kategori för {{ displayName(t.text) }}</label>
-              <select :id="'c' + txKey(t)" class="pill" :class="{ unset: !chosenCategory(t.text, overrides) }" style="border: 0" :value="chosenCategory(t.text, overrides)" @change="emit('override', merchant(t.text), $event.target.value)">
+              <select :id="'c' + txKey(t)" class="pill" :class="{ unset: !chosenCategory(t, overrides) }" style="border: 0" :value="chosenCategory(t, overrides)" @change="setCategory(t, $event.target.value)">
                 <option value="" disabled>Välj kategori…</option>
                 <option v-for="c in CATEGORIES" :key="c">{{ c }}</option>
               </select>
@@ -57,4 +72,6 @@ const moved = (t) => monthOf(t) !== booked(t)
 <style scoped>
 .moved { margin-left: 6px; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--link); font-size: 11px; font-weight: 700; }
 .pill.shifted { background: var(--accent-soft); color: var(--link); }
+.suggest { position: sticky; top: 140px; z-index: 5; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; border: 1px solid var(--note-line); border-radius: 10px; padding: 10px 14px; font-size: 14px; }
+.btn.small { height: 32px; padding: 0 14px; font-size: 13px; }
 </style>

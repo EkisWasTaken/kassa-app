@@ -53,7 +53,7 @@ const barColor =(s) => (s === 'over' ? 'var(--warm)' : s === 'warn' ? 'var(--c5)
 <template>
   <div class="card">
     <div class="row">
-      <h2>Budget · {{ monthLong(month) }}</h2>
+      <h2>Budget per kategori</h2>
       <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
         <span v-if="status.length" class="mono" style="font-weight: 600">{{ fmt(totals.spent) }} av {{ fmt(totals.budget) }} kr</span>
         <button class="btn small ghost" @click="suggest">Föreslå från snittet</button>

@@ -14,7 +14,7 @@ const doneCount = computed(() => items.value.filter((i) => i.done).length)
 <template>
   <div class="card">
     <div class="row">
-      <h2>Månadskoll · {{ monthLong(month) }}</h2>
+      <h2>Din genomgång</h2>
       <span class="mono" :style="{ color: doneCount === items.length ? 'var(--good-text)' : 'var(--muted)', fontWeight: 600 }">{{ doneCount }} av {{ items.length }} klara</span>
     </div>
     <div class="bar" role="progressbar" :aria-valuenow="doneCount" aria-valuemin="0" :aria-valuemax="items.length" aria-label="Framsteg"><i :style="{ width: (doneCount / items.length * 100) + '%' }"></i></div>

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseCsv, parseAmount, parseDate, decodeText, merchant, categorize, displayName, parseStatement, mergeTx, monthly, subscriptionStats, suggestions, alerts, SERVICES, unusualCharges, checklist, chosenCategory, yearSummary, categoryMatrix, budgetStatus, suggestBudgets, goalPlan, contributions, paidInUntil, accountValueAt, accountStats, netWorthSeries, salaryPayer, incomeBreakdown, latePayments, withMoves, txKey, planInfo } from './logic.js'
+import { parseCsv, parseAmount, parseDate, decodeText, merchant, categorize, displayName, parseStatement, mergeTx, monthly, subscriptionStats, suggestions, alerts, SERVICES, unusualCharges, checklist, chosenCategory, yearSummary, categoryMatrix, budgetStatus, suggestBudgets, goalPlan, contributions, paidInUntil, accountValueAt, accountStats, netWorthSeries, salaryPayer, incomeBreakdown, latePayments, withMoves, txKey, planInfo, withRules, ruleSuggestion, forecast } from './logic.js'
 
 const tx = (date, text, amount, balance = 0) => ({ date, text, amount, balance })
 const svc = (name) => ({ ...SERVICES.find((s) => s.name === name), cycle: 'månad' })
@@ -300,4 +300,32 @@ test('planInfo finds the plan from the price and what switching saves', () => {
 test('planInfo shows the saving from yearly billing', () => {
   const [s] = subscriptionStats([tx('2026-10-03', 'HBOMAX', -149)], [svc('HBO Max')])
   assert.equal(planInfo(s).yearlySaving, 298)
+})
+
+test('your own rules come after your choice for a payee but before Kassa, and can look at the amount', () => {
+  const rules = [{ text: 'swish', over: 1000, category: 'Överföring' }, { text: 'ICA', category: 'Mat' }]
+  const txs = withRules([tx('2026-10-01', 'Swish till Sam Ek', -1500), tx('2026-10-02', 'Swish till Sam Ek', -200), tx('2026-10-03', 'ICA NARA HORNSTULL', -90), tx('2026-10-04', 'MUSICAL TICKETS', -400)], rules)
+  assert.deepEqual(txs.map((t) => categorize(t)).slice(0, 3), ['Överföring', 'Swish', 'Mat'])
+  assert.equal(txs[3].rule, undefined) // whole words only
+  assert.equal(categorize(txs[2], { 'ICA NARA HORNSTULL': 'Restaurang & café' }), 'Restaurang & café')
+  assert.equal(chosenCategory(txs[2]), 'Mat')
+})
+
+test('ruleSuggestion offers a rule when other payees share the first word', () => {
+  const txs = [tx('2026-10-01', 'ICA NARA HORNSTULL', -90), tx('2026-10-02', 'ICA KVANTUM', -300), tx('2026-10-03', 'ICA KVANTUM', -100), tx('2026-10-04', 'COOP', -50)]
+  assert.deepEqual(ruleSuggestion(txs, {}, 'ICA NARA HORNSTULL', 'Mat'), { text: 'ICA', category: 'Mat', payees: 1, count: 3 })
+  assert.equal(ruleSuggestion(txs, {}, 'COOP', 'Mat'), null)
+})
+
+test('forecast adds regular payments still to come and usual daily spending', () => {
+  const txs = []
+  for (const m of ['08', '09']) txs.push(tx(`2026-${m}-02`, 'HYRA BRF', -8000), tx(`2026-${m}-25`, 'LÖN ACME', 30000), tx(`2026-${m}-10`, 'ICA', -3100), tx(`2026-${m}-20`, 'ICA', -3000))
+  txs.push(tx('2026-10-02', 'HYRA BRF', -8000), tx('2026-10-10', 'ICA', -2000))
+  const f = forecast(txs, {}, '2026-10')
+  assert.equal(f.soFar, -10000)
+  assert.deepEqual(f.left, [{ name: 'Lön Acme', amount: 30000 }])
+  assert.equal(f.daysLeft, 21)
+  assert.equal(Math.round(f.perDay), 200) // 12 200 kr of ICA over 61 days
+  assert.equal(Math.round(f.total), 30000 - 10000 - 4200)
+  assert.equal(forecast(txs, {}, '2026-09'), null)
 })

@@ -12,7 +12,7 @@ import Investments from './Investments.vue'
 import Logo from './Logo.vue'
 
 const TABS = ['Översikt', 'Månadskoll', 'Budget', 'Investeringar', 'År', 'Transaktioner', 'Prenumerationer', 'Inställningar']
-import { parseStatement, parseCsv, decodeText, mergeTx, monthsIn, monthLong, checklist, withMoves } from './logic.js'
+import { parseStatement, parseCsv, decodeText, mergeTx, monthsIn, monthLong, checklist, withMoves, withRules, displayName, title } from './logic.js'
 
 // Electron saves to a JSON file via preload; plain browser (vite dev preview) falls back to localStorage.
 const store = window.api ?? {
@@ -24,7 +24,7 @@ const OLD_CATS = { Housing: 'Boende', 'Insurance & loans': 'Försäkring & lån'
   'Phone & internet': 'Telefon & internet', 'Clubs & fitness': 'Föreningar & träning', Food: 'Mat', Restaurants: 'Restaurang & café',
   Travel: 'Resor', Bills: 'Räkningar', Transfer: 'Överföring', Other: 'Övrigt' }
 
-const EMPTY = () => ({ tx: [], overrides: {}, goal: 0.15, subs: [], dismissed: [], checked: {}, budgets: {}, goals: [], accounts: [], moves: {} })
+const EMPTY = () => ({ tx: [], overrides: {}, goal: 0.15, subs: [], dismissed: [], checked: {}, budgets: {}, goals: [], accounts: [], moves: {}, rules: [] })
 const data = ref(EMPTY())
 const loaded = ref(false)
 const loadError = ref('')
@@ -35,7 +35,7 @@ const month = ref('')
 const fileInput = ref()
 
 // What every view reads: transactions with their chosen month applied (data.moves: txKey -> 'YYYY-MM')
-const view = computed(() => ({ ...data.value, tx: withMoves(data.value.tx, data.value.moves) }))
+const view = computed(() => ({ ...data.value, tx: withRules(withMoves(data.value.tx, data.value.moves), data.value.rules) }))
 const months = computed(() => monthsIn(view.value.tx))
 
 onMounted(async () => {
@@ -85,13 +85,28 @@ function restored(d) {
   message.value = 'Data återställd från säkerhetskopia.'
 }
 
-function change(fn) { fn(data.value); save() }
-const setOverride = (m, cat) => change((d) => { d.overrides = { ...d.overrides, [m]: cat } })
+// Every change keeps a copy of the data from before it, so the latest one can be undone from the toast
+const undoState = ref(null) // { label, before }
+let undoTimer
+function change(fn, label) {
+  const before = JSON.parse(JSON.stringify(data.value))
+  fn(data.value)
+  save()
+  clearTimeout(undoTimer)
+  undoState.value = label ? { label, before } : null
+  if (label) undoTimer = setTimeout(() => { undoState.value = null }, 8000)
+}
+function undo() {
+  data.value = undoState.value.before
+  undoState.value = null
+  save()
+}
+const setOverride = (m, cat) => change((d) => { d.overrides = { ...d.overrides, [m]: cat } }, `${title(m)} är nu ${cat}`)
 const addSub = (s) => change((d) => { d.subs.push({ name: s.name, match: s.match, kind: s.kind, cycle: s.cycle, category: s.category }) })
-const dismiss = (name) => change((d) => { d.dismissed.push(name) })
+const dismiss = (name) => change((d) => { d.dismissed.push(name) }, `${name} föreslås inte igen`)
 const undismiss = (name) => change((d) => { d.dismissed = d.dismissed.filter((n) => n !== name) })
 const updateSub = (i, patch) => change((d) => { Object.assign(d.subs[i], patch) })
-const removeSub = (i) => change((d) => { d.subs.splice(i, 1) })
+const removeSub = (i) => change((d) => { d.subs.splice(i, 1) }, `${data.value.subs[i].name} borttagen`)
 const toggleChecked = (m, id) => change((d) => {
   const list = d.checked[m] ?? []
   d.checked = { ...d.checked, [m]: list.includes(id) ? list.filter((x) => x !== id) : [...list, id] }
@@ -101,11 +116,14 @@ const setBudgets = (b) => change((d) => { d.budgets = Object.fromEntries(Object.
 const setRate = (r) => change((d) => { d.goal = r })
 const addGoal = (g) => change((d) => { d.goals.push(g) })
 const updateGoal = (i, patch) => change((d) => { Object.assign(d.goals[i], patch) })
-const removeGoal = (i) => change((d) => { d.goals.splice(i, 1) })
+const removeGoal = (i) => change((d) => { d.goals.splice(i, 1) }, `Sparmålet ${data.value.goals[i].name} borttaget`)
 const addAccount = (a) => change((d) => { d.accounts.push(a) })
 const updateAccount = (i, patch) => change((d) => { Object.assign(d.accounts[i], patch) })
-const removeAccount = (i) => change((d) => { d.accounts.splice(i, 1) })
-const setMove = (key, m) => change((d) => { const { [key]: _, ...rest } = d.moves; d.moves = m ? { ...rest, [key]: m } : rest })
+const removeAccount = (i) => change((d) => { d.accounts.splice(i, 1) }, `Kontot ${data.value.accounts[i].name} borttaget`)
+const setMove = (key, m) => change((d) => { const { [key]: _, ...rest } = d.moves; d.moves = m ? { ...rest, [key]: m } : rest },
+  `${displayName(key.split('|')[1])} räknas nu till ${monthLong(m ?? key.slice(0, 7)).toLowerCase()}`)
+const addRule = (r) => change((d) => { d.rules = [...d.rules, r] }, `Regel skapad: ${r.text} blir ${r.category}`)
+const removeRule = (i) => change((d) => { d.rules = d.rules.filter((_, j) => j !== i) }, `Regeln för ${data.value.rules[i].text} borttagen`)
 
 const openItems = computed(() => {
   if (!month.value) return 0
@@ -150,7 +168,7 @@ function search() { if (query.value) tab.value = 'Transaktioner' }
     <div v-if="loadError" class="banner" role="alert">{{ loadError }}</div>
     <div v-if="message" class="banner" role="status">{{ message }} <button class="link" @click="message = ''">Stäng</button></div>
 
-    <Settings v-if="tab === 'Inställningar'" @restored="restored" />
+    <Settings v-if="tab === 'Inställningar'" :rules="data.rules" :txs="view.tx" @restored="restored" @add-rule="addRule" @remove-rule="removeRule" />
 
     <div v-else-if="loaded && !data.tx.length" class="card empty">
       <h2>Importera ditt första kontoutdrag</h2>
@@ -168,10 +186,15 @@ function search() { if (query.value) tab.value = 'Transaktioner' }
       <Year v-else-if="tab === 'År'" :data="view" />
       <Investments v-else-if="tab === 'Investeringar'" :data="view" @add-account="addAccount" @update-account="updateAccount" @remove-account="removeAccount" />
       <Budget v-else-if="tab === 'Budget'" :data="view" :month="month" @set-budgets="setBudgets" @set-rate="setRate" @add-goal="addGoal" @update-goal="updateGoal" @remove-goal="removeGoal" />
-      <Transactions v-else-if="tab === 'Transaktioner'" :txs="view.tx" :overrides="data.overrides" :query="query" :month="month" @override="setOverride" @move="setMove" />
+      <Transactions v-else-if="tab === 'Transaktioner'" :txs="view.tx" :overrides="data.overrides" :query="query" :month="month" @override="setOverride" @move="setMove" @add-rule="addRule" />
       <Subscriptions v-else-if="tab === 'Prenumerationer'" :data="view" @add="addSub" @dismiss="dismiss" @undismiss="undismiss" @update="updateSub" @remove="removeSub" />
     </template>
   </main>
+
+  <div v-if="undoState" class="toast" role="status">
+    <span>{{ undoState.label }}</span>
+    <button @click="undo">Ångra</button>
+  </div>
 </template>
 
 <style scoped>
@@ -200,8 +223,14 @@ function search() { if (query.value) tab.value = 'Transaktioner' }
 .field { display: flex; align-items: center; gap: 8px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 0 14px; height: 40px; font-size: 14px; }
 .field:focus-within { border-color: var(--accent); }
 .banner { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; font-size: 14px; }
-.badge { margin-left: 6px; display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 9px; background: var(--warm); color: #fff; font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 18px; }
-.nudge { border-color: transparent; text-align: left; background: var(--warm-soft); cursor: pointer; }
+.badge { margin-left: 6px; display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 9px; background: var(--warm); color: var(--on-warm); font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 18px; }
+.nudge { text-align: left; background: var(--note); border-color: var(--note-line); cursor: pointer; }
+.nudge b { color: var(--warm-text); }
 .link { border: 0; background: none; color: var(--link); font-weight: 700; margin-left: 8px; }
+.toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 20; display: flex; gap: 16px; align-items: center; max-width: calc(100vw - 32px);
+  background: var(--hero); color: var(--hero-ink); border-radius: 10px; padding: 10px 12px 10px 16px; font-size: 14px; box-shadow: 0 6px 24px rgb(0 0 0 / .25); animation: rise .2s ease-out; }
+.toast button { border: 1px solid var(--hero-muted); background: transparent; color: var(--hero-ink); border-radius: 8px; height: 32px; padding: 0 12px; font-weight: 650; }
+.toast button:focus-visible { outline-color: var(--hero-ink); }
+@keyframes rise { from { transform: translate(-50%, 8px); } } /* no fade, so a paused animation never leaves it invisible */
 .empty { max-width: 560px; margin: 80px auto; text-align: center; align-items: center; }
 </style>

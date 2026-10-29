@@ -64,9 +64,12 @@ export function merchant(text) {
   return name.trim().replace(/(\s+\S*\d\S*)+$/, '') // drop trailing order ids
 }
 
-export function categorize(text, overrides = {}) {
+// Takes a transaction or just its text. Your choice for the payee wins, then your own rules (t.rule, see withRules), then Kassa's.
+export function categorize(x, overrides = {}) {
+  const text = x.text ?? x
   const o = overrides[merchant(text)]
   if (o) return o
+  if (x.rule) return x.rule
   const t = text.toUpperCase().trim()
   if (/^\d{4}\.\d{2}\.\d{3}\.\d{2}$/.test(t)) return 'Överföring'
   if (/^\d{2,8}-\d{1,4}$/.test(t)) return 'Räkningar'
@@ -76,7 +79,20 @@ export function categorize(text, overrides = {}) {
 }
 
 // '' when a payment landed in Övrigt only because no rule matched, so pickers can show "Välj kategori…"
-export const chosenCategory = (text, overrides = {}) => (!overrides[merchant(text)] && categorize(text, overrides) === 'Övrigt' ? '' : categorize(text, overrides))
+export const chosenCategory = (x, overrides = {}) => (!overrides[merchant(x.text ?? x)] && !x.rule && categorize(x, overrides) === 'Övrigt' ? '' : categorize(x, overrides))
+
+// Your own category rules: { text: 'ICA', over?: 1000, category }. Text matches whole words, so ICA doesn't hit MUSICAL.
+const words = (s) => ` ${s.toUpperCase().replace(/[^A-Z0-9ÅÄÖÉÜ]+/g, ' ').trim()} `
+export const ruleMatches = (r, t) => words(t.text).includes(words(r.text)) && (!r.over || Math.abs(t.amount) > r.over)
+export const withRules = (txs, rules = []) => (rules.length ? txs.map((t) => { const r = rules.find((x) => ruleMatches(x, t)); return r ? { ...t, rule: r.category } : t }) : txs)
+
+// After you pick a category for one payee: a rule on the payee's first word, if other payees share it.
+export function ruleSuggestion(txs, overrides, payee, category) {
+  const word = payee.split(/\s+/)[0]
+  if (word.length < 3 || word === payee) return null
+  const others = new Set(txs.filter((t) => merchant(t.text) !== payee && !overrides[merchant(t.text)] && ruleMatches({ text: word }, t)).map((t) => merchant(t.text)))
+  return others.size ? { text: word, category, payees: others.size, count: txs.filter((t) => ruleMatches({ text: word }, t)).length } : null
+}
 
 // The name to show for a transaction: the known service name, else the cleaned merchant.
 export function displayName(text) {
@@ -203,7 +219,7 @@ export function monthly(txs, overrides) {
   const by = {}
   for (const m of monthsIn(txs)) by[m] = { month: m, income: 0, gross: 0, refunds: 0, invested: 0 }
   for (const t of txs) {
-    const c = categorize(t.text, overrides), row = by[monthOf(t)]
+    const c = categorize(t, overrides), row = by[monthOf(t)]
     if (c === 'Överföring') continue
     if (c === 'Sparande') row.invested += -t.amount
     else if (c === 'Återbetalning') row.refunds += t.amount
@@ -217,7 +233,7 @@ export function monthly(txs, overrides) {
 export function byCategory(txs, overrides) {
   const out = {}
   for (const t of txs) {
-    const c = categorize(t.text, overrides)
+    const c = categorize(t, overrides)
     if (t.amount < 0 && !NOT_SPENDING.has(c)) out[c] = (out[c] || 0) - t.amount
   }
   return Object.entries(out).map(([category, amount]) => ({ category, amount })).sort((a, b) => b.amount - a.amount)
@@ -227,13 +243,39 @@ export function daily(txs, overrides, month) {
   const days = new Date(+month.slice(0, 4), +month.slice(5, 7), 0).getDate()
   const out = Array(days).fill(0)
   for (const t of txs) {
-    if (monthOf(t) === month && t.amount < 0 && !NOT_SPENDING.has(categorize(t.text, overrides))) out[t.date.startsWith(month) ? +t.date.slice(8, 10) - 1 : t.date < month ? 0 : days - 1] -= t.amount
+    if (monthOf(t) === month && t.amount < 0 && !NOT_SPENDING.has(categorize(t, overrides))) out[t.date.startsWith(month) ? +t.date.slice(8, 10) - 1 : t.date < month ? 0 : days - 1] -= t.amount
   }
   return out
 }
 
 const matches = (sub, t) => { const u = t.text.toUpperCase(); return sub.match.some((p) => u.includes(p)) }
 const daysBetween = (a, b) => (new Date(b) - new Date(a)) / 864e5
+const daysIn = (m) => new Date(+m.slice(0, 4), +m.slice(5, 7), 0).getDate()
+
+// Where the running month is heading: the result so far, regular payments and income still to come (exactly once in
+// each of the last two months, about the same amount, not seen yet this month), and usual day-to-day spending for the
+// days left. null for a finished month or without two months of history.
+export function forecast(txs, overrides, month) {
+  const days = daysIn(month), p1 = shiftMonth(month, -1), p2 = shiftMonth(month, -2)
+  const lastDay = Math.max(0, ...txs.filter((t) => t.date.startsWith(month)).map((t) => +t.date.slice(8, 10)))
+  if (month !== monthsIn(txs).at(-1) || !lastDay || lastDay >= days || !txs.some((t) => monthOf(t) === p2)) return null
+  const counted = (t) => !['Överföring', 'Sparande', 'Återbetalning'].includes(categorize(t, overrides))
+  const by = {}
+  for (const t of txs) if (counted(t)) ((by[merchant(t.text)] ??= {})[monthOf(t)] ??= []).push(t)
+  const regular = new Set(), left = []
+  for (const [m, byMonth] of Object.entries(by)) {
+    const [a] = byMonth[p1] ?? [], [b] = byMonth[p2] ?? []
+    if (byMonth[p1]?.length !== 1 || byMonth[p2]?.length !== 1 || Math.abs(a.amount) < 50) continue
+    if (Math.sign(a.amount) !== Math.sign(b.amount) || Math.abs(a.amount - b.amount) > 0.15 * Math.abs(b.amount)) continue
+    regular.add(m)
+    if (!byMonth[month]) left.push({ name: displayName(a.text), amount: a.amount })
+  }
+  const usual = txs.filter((t) => (monthOf(t) === p1 || monthOf(t) === p2) && t.amount < 0 && counted(t) && !regular.has(merchant(t.text)))
+  const perDay = -usual.reduce((s, t) => s + t.amount, 0) / (daysIn(p1) + daysIn(p2))
+  const soFar = monthly(txs, overrides).find((r) => r.month === month).saved
+  const daysLeft = days - lastDay
+  return { soFar, left: left.sort((x, y) => x.amount - y.amount), perDay, daysLeft, total: soFar + left.reduce((s, x) => s + x.amount, 0) - perDay * daysLeft }
+}
 
 // History and status for each confirmed recurring cost, from the transactions that match it.
 export function subscriptionStats(txs, subs) {
@@ -305,10 +347,10 @@ export function alerts(txs, overrides, subs, dismissed, riseLimit = 0.05) {
     }
   }
   // Large deposits that aren't the salary are often your own transfers, which inflate income
-  const incoming = monthTx.filter((t) => t.amount > 0 && categorize(t.text, overrides) !== 'Överföring')
+  const incoming = monthTx.filter((t) => t.amount > 0 && categorize(t, overrides) !== 'Överföring')
   const salary = incoming.reduce((m, t) => (t.amount > (m?.amount ?? 0) ? t : m), null)
   for (const t of incoming) {
-    if (t !== salary && t.amount >= 2000 && categorize(t.text, overrides) === 'Övrigt') {
+    if (t !== salary && t.amount >= 2000 && categorize(t, overrides) === 'Övrigt') {
       out.push({ kind: 'transfer', key: merchant(t.text), title: 'Egen överföring?', body: `${fmt(t.amount)} kr från ${displayName(t.text)} räknas som inkomst. Markera som Överföring under Transaktioner om det är mellan dina konton.` })
     }
   }
@@ -340,7 +382,7 @@ export function unusualCharges(txs, overrides, subs, month, min = 1500) {
   const before = txs.filter((t) => monthOf(t) < month && t.amount < 0)
   return txs.filter((t) => {
     if (monthOf(t) !== month || t.amount > -min || subs.some((s) => matches(s, t))) return false
-    if (['Boende', 'Sparande', 'Överföring'].includes(categorize(t.text, overrides))) return false
+    if (['Boende', 'Sparande', 'Överföring'].includes(categorize(t, overrides))) return false
     const prev = before.filter((p) => merchant(p.text) === merchant(t.text)).map((p) => -p.amount)
     return !prev.length || -t.amount > 2 * Math.max(...prev)
   })
@@ -370,7 +412,7 @@ export function checklist(txs, overrides, subs, dismissed, month, budgets = {}, 
   const monthTx = txs.filter((t) => monthOf(t) === month)
   const warn = alerts(txs, overrides, subs, dismissed)
   // only payments nobody has categorised; choosing Övrigt yourself counts as a decision (deposits are covered by the transfer check)
-  const other = monthTx.filter((t) => t.amount < 0 && !overrides[merchant(t.text)] && categorize(t.text, overrides) === 'Övrigt')
+  const other = monthTx.filter((t) => t.amount < 0 && chosenCategory(t, overrides) === '')
   const unusual = unusualCharges(txs, overrides, subs, month)
   const over = budgetStatus(txs, overrides, budgets, month).filter((b) => b.status === 'over')
   const stale = accounts.filter((a) => !(a.snapshots ?? []).some((s) => s.month >= month))
@@ -403,7 +445,7 @@ export function categoryMatrix(txs, overrides, year) {
   const out = {}
   for (const t of txs) {
     if (monthOf(t).slice(0, 4) !== String(year) || t.amount >= 0) continue
-    const c = categorize(t.text, overrides)
+    const c = categorize(t, overrides)
     if (NOT_SPENDING.has(c)) continue
     out[c] ??= Array(12).fill(0)
     out[c][+monthOf(t).slice(5, 7) - 1] -= t.amount
@@ -499,7 +541,7 @@ export function netWorthSeries(txs, accounts) {
 export function savingsTransfers(txs, overrides) {
   const seen = {}
   for (const t of txs) {
-    const c = categorize(t.text, overrides)
+    const c = categorize(t, overrides)
     if (t.amount < 0 && (c === 'Sparande' || c === 'Överföring')) seen[merchant(t.text)] = (seen[merchant(t.text)] || 0) - t.amount
   }
   return Object.entries(seen).map(([name, total]) => ({ name, total })).sort((a, b) => b.total - a.total)
@@ -509,7 +551,7 @@ export function savingsTransfers(txs, overrides) {
 export function salaryPayer(txs, overrides) {
   const g = {}
   for (const t of txs) {
-    if (t.amount <= 0 || ['Överföring', 'Återbetalning', 'Sparande'].includes(categorize(t.text, overrides))) continue
+    if (t.amount <= 0 || ['Överföring', 'Återbetalning', 'Sparande'].includes(categorize(t, overrides))) continue
     const m = merchant(t.text)
     g[m] ??= { total: 0, months: new Set() }
     g[m].total += t.amount; g[m].months.add(monthOf(t))
@@ -525,7 +567,7 @@ export function incomeBreakdown(txs, overrides, month) {
   let biggest = null
   for (const t of txs) {
     if (monthOf(t) !== month || t.amount <= 0) continue
-    const key = merchant(t.text), c = categorize(t.text, overrides)
+    const key = merchant(t.text), c = categorize(t, overrides)
     if (c === 'Sparande') continue
     g[key] ??= { key, name: displayName(t.text), amount: 0, kind: c === 'Överföring' || c === 'Återbetalning' || c === 'Lön' ? c : key === salary ? 'Lön' : 'Övrigt' }
     g[key].amount += t.amount
