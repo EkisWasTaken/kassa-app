@@ -116,6 +116,7 @@ const setBudgets = (b) => change((d) => { d.budgets = Object.fromEntries(Object.
 const setRate = (r) => change((d) => { d.goal = r })
 const addGoal = (g) => change((d) => { d.goals.push(g) })
 const updateGoal = (i, patch) => change((d) => { Object.assign(d.goals[i], patch) })
+const raiseGoal = (i) => change((d) => { d.goals.splice(i - 1, 0, d.goals.splice(i, 1)[0]) }, `${data.value.goals[i].name} prioriteras före ${data.value.goals[i - 1].name}`)
 const removeGoal = (i) => change((d) => { d.goals.splice(i, 1) }, `Sparmålet ${data.value.goals[i].name} borttaget`)
 const addAccount = (a) => change((d) => { d.accounts.push(a) })
 const updateAccount = (i, patch) => change((d) => { Object.assign(d.accounts[i], patch) })
@@ -187,7 +188,7 @@ function search() { if (query.value) tab.value = 'Transaktioner' }
       <Checklist v-else-if="tab === 'Månadskoll'" :data="view" :month="month" @go="go" @toggle="toggleChecked" @override="setOverride" @move="setMove" />
       <Year v-else-if="tab === 'År'" :data="view" />
       <Investments v-else-if="tab === 'Investeringar'" :data="view" @add-account="addAccount" @update-account="updateAccount" @remove-account="removeAccount" />
-      <Budget v-else-if="tab === 'Budget'" :data="view" :month="month" @set-budgets="setBudgets" @set-rate="setRate" @add-goal="addGoal" @update-goal="updateGoal" @remove-goal="removeGoal" />
+      <Budget v-else-if="tab === 'Budget'" :data="view" :month="month" @set-budgets="setBudgets" @set-rate="setRate" @add-goal="addGoal" @update-goal="updateGoal" @remove-goal="removeGoal" @raise-goal="raiseGoal" />
       <Transactions v-else-if="tab === 'Transaktioner'" :txs="view.tx" :overrides="data.overrides" :names="data.names" :query="query" :month="month" @override="setOverride" @move="setMove" @add-rule="addRule" @rename="setName" />
       <Subscriptions v-else-if="tab === 'Prenumerationer'" :data="view" @add="addSub" @dismiss="dismiss" @undismiss="undismiss" @update="updateSub" @remove="removeSub" />
     </template>

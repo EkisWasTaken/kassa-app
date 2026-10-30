@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseCsv, parseAmount, parseDate, decodeText, merchant, categorize, displayName, parseStatement, mergeTx, monthly, subscriptionStats, suggestions, alerts, SERVICES, unusualCharges, checklist, chosenCategory, yearSummary, categoryMatrix, budgetStatus, suggestBudgets, goalPlan, contributions, paidInUntil, accountValueAt, accountStats, gainLooksWrong, netWorthSeries, salaryPayer, incomeBreakdown, latePayments, withMoves, txKey, planInfo, withRules, ruleSuggestion, forecast } from './logic.js'
+import { parseCsv, parseAmount, parseDate, decodeText, merchant, categorize, displayName, parseStatement, mergeTx, monthly, subscriptionStats, suggestions, alerts, SERVICES, unusualCharges, checklist, chosenCategory, yearSummary, categoryMatrix, budgetStatus, suggestBudgets, goalPlan, contributions, paidInUntil, accountValueAt, accountStats, gainLooksWrong, planGoals, netWorthSeries, salaryPayer, incomeBreakdown, latePayments, withMoves, txKey, planInfo, withRules, ruleSuggestion, forecast } from './logic.js'
 
 const tx = (date, text, amount, balance = 0) => ({ date, text, amount, balance })
 const svc = (name) => ({ ...SERVICES.find((s) => s.name === name), cycle: 'månad' })
@@ -207,6 +207,21 @@ test('gainLooksWrong flags money that was there before the statements', () => {
   assert.equal(gainLooksWrong(isk(), { estimated: false, gain: 5000, gainPct: 0.5, paid: 10000 }), false)
   assert.equal(gainLooksWrong(isk(), { estimated: false, gain: 42000, gainPct: 0, paid: 0 }), true)
   assert.equal(gainLooksWrong(spar, { estimated: true, gain: 0, gainPct: 0, paid: 0 }), false)
+})
+
+test('planGoals splits an account and the pace between goals instead of counting them twice', () => {
+  const txs = [tx('2026-08-27', 'Överf ISK sparplan', -1500), tx('2026-09-27', 'Överf ISK sparplan', -500)]
+  const accounts = [isk({ startPaidIn: 10000 })] // worth 12 000, 1 000 kr/mån in
+  const [buffer, trip, gone, own] = planGoals([
+    { name: 'Buffert', target: 10000, saved: 0, account: 'ISK' },
+    { name: 'Resa', target: 5000, saved: 0, account: 'ISK' },
+    { name: 'Bil', target: 3000, saved: 700, account: 'Borttaget' },
+    { name: 'Dator', target: 1000, saved: 400 },
+  ], txs, accounts, '2026-09-30', 500)
+  assert.deepEqual([buffer.saved, buffer.linked, buffer.plan.done], [10000, true, true])
+  assert.deepEqual([trip.saved, trip.pace, trip.plan.eta], [2000, 1000, '2026-12']) // the rest; 3 000 left at 1 000/mån
+  assert.deepEqual([gone.saved, gone.linked, gone.plan.eta], [700, false, '2027-02']) // falls back to own numbers
+  assert.equal(own.plan.eta, '2027-03') // waits for Bil: (2 300 + 600) / 500 = 6 months
 })
 
 test('netWorthSeries adds month-end bank balance and account values', () => {

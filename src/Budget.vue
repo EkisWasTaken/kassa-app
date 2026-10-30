@@ -1,9 +1,9 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { budgetStatus, suggestBudgets, goalPlan, byCategory, monthly, monthOf, monthLong, fmt, CATEGORIES } from './logic.js'
+import { budgetStatus, suggestBudgets, planGoals, byCategory, monthly, monthOf, monthLong, fmt, CATEGORIES } from './logic.js'
 
 const props = defineProps({ data: Object, month: String })
-const emit = defineEmits(['set-budgets', 'set-rate', 'add-goal', 'update-goal', 'remove-goal'])
+const emit = defineEmits(['set-budgets', 'set-rate', 'add-goal', 'update-goal', 'remove-goal', 'raise-goal'])
 
 const MONTHS_LONG = ['januari', 'februari', 'mars', 'april', 'maj', 'juni', 'juli', 'augusti', 'september', 'oktober', 'november', 'december']
 const ym = (s) => `${MONTHS_LONG[+s.slice(5, 7) - 1]} ${s.slice(0, 4)}`
@@ -30,13 +30,15 @@ function addBudget() { if (newCat.value) { setBudget(newCat.value, suggestBudget
 
 // Savings goals
 const recentSaved = computed(() => { const m = monthly(props.data.tx, props.data.overrides).slice(-6); return m.reduce((s, r) => s + r.saved, 0) / Math.max(1, m.length) })
-const goals = computed(() => (props.data.goals ?? []).map((g, i) => ({ ...g, i, plan: goalPlan(g, today, recentSaved.value) })))
-const draft = ref({ name: '', target: '', saved: '', deadline: '' })
+const accounts = computed(() => props.data.accounts ?? [])
+const goals = computed(() => planGoals(props.data.goals ?? [], props.data.tx, accounts.value, today, recentSaved.value))
+const sharesAccount = (g) => g.linked && goals.value.filter((x) => x.linked && x.account === g.account).length > 1
+const draft = ref({ name: '', target: '', saved: '', deadline: '', account: '' })
 const num = (v) => Math.max(0, Math.round(Number(String(v).replace(/\s/g, '').replace(',', '.')) || 0))
 function addGoal() {
   if (!draft.value.name.trim() || !num(draft.value.target)) return
-  emit('add-goal', { name: draft.value.name.trim(), target: num(draft.value.target), saved: num(draft.value.saved), deadline: draft.value.deadline || null })
-  draft.value = { name: '', target: '', saved: '', deadline: '' }
+  emit('add-goal', { name: draft.value.name.trim(), target: num(draft.value.target), saved: num(draft.value.saved), deadline: draft.value.deadline || null, account: draft.value.account || null })
+  draft.value = { name: '', target: '', saved: '', deadline: '', account: '' }
 }
 const deposit = ref({})
 function addDeposit(g) {
@@ -97,9 +99,10 @@ const barColor =(s) => (s === 'over' ? 'var(--warm)' : s === 'warn' ? 'var(--c5)
 
   <div class="card">
     <div class="row"><h2>Sparmål</h2><span class="muted" style="font-size: 13px">Din spartakt senaste 6 mån: <b class="mono">{{ fmt(recentSaved) }} kr/mån</b></span></div>
+    <p v-if="goals.length > 1" class="muted" style="margin: 0; font-size: 13px">Sparandet räknas bara en gång: mål som delar konto (eller ditt vanliga sparande) fylls i ordning, översta först. Flytta upp ett mål med ↑ för att prioritera det.</p>
     <div class="goals">
       <div v-for="g in goals" :key="g.i" class="goal" :class="{ done: g.plan.done }">
-        <div class="row" style="flex-wrap: nowrap"><b style="font-size: 16px">{{ g.name }}</b><button class="link-btn" :aria-label="'Ta bort sparmålet ' + g.name" @click="emit('remove-goal', g.i)">Ta bort</button></div>
+        <div class="row" style="flex-wrap: nowrap"><b style="font-size: 16px">{{ g.name }}</b><span style="display: flex; gap: 10px"><button v-if="g.i > 0" class="link-btn" :aria-label="'Prioritera ' + g.name + ' före målet ovanför'" title="Prioritera före målet ovanför" @click="emit('raise-goal', g.i)">↑</button><button class="link-btn" :aria-label="'Ta bort sparmålet ' + g.name" @click="emit('remove-goal', g.i)">Ta bort</button></span></div>
         <div class="mono" style="font-size: 26px; font-weight: 600">{{ fmt(g.saved) }} <span class="muted" style="font-size: 14px">/ {{ fmt(g.target) }} kr</span></div>
         <div class="bar" role="img" :aria-label="`${Math.round(g.plan.progress * 100)} procent av målet`"><i :style="{ width: g.plan.progress * 100 + '%', background: 'var(--accent)' }"></i></div>
         <div class="muted" style="font-size: 13px; display: flex; flex-direction: column; gap: 2px">
@@ -107,11 +110,19 @@ const barColor =(s) => (s === 'over' ? 'var(--warm)' : s === 'warn' ? 'var(--c5)
           <template v-else>
             <span>{{ Math.round(g.plan.progress * 100) }} % · {{ fmt(g.plan.left) }} kr kvar</span>
             <span v-if="g.deadline">Spara {{ fmt(g.plan.perMonth) }} kr/mån för att nå det till {{ ym(g.deadline) }}</span>
-            <span v-if="g.plan.eta">I din nuvarande takt: klart {{ ym(g.plan.eta) }}</span>
-            <span v-else>Du sparar inget just nu, så det går inte att räkna fram när målet nås</span>
+            <span v-if="g.plan.eta">{{ g.linked ? `Med ${fmt(g.pace)} kr/mån till kontot` : 'I din nuvarande takt' }}: klart {{ ym(g.plan.eta) }}</span>
+            <span v-else>{{ g.linked ? 'Inga insättningar till kontot senaste månaderna' : 'Du sparar inget just nu' }}, så det går inte att räkna fram när målet nås</span>
           </template>
         </div>
-        <div v-if="!g.plan.done" style="display: flex; gap: 6px">
+        <div v-if="accounts.length" class="muted" style="font-size: 12px; display: flex; gap: 6px; align-items: center">
+          <label :for="'a' + g.i">Konto:</label>
+          <select :id="'a' + g.i" class="pill" style="border: 0" :value="g.linked ? g.account : ''" @change="emit('update-goal', g.i, { account: $event.target.value || null })">
+            <option value="">Inget (fyll i själv)</option>
+            <option v-for="a in accounts" :key="a.name">{{ a.name }}</option>
+          </select>
+          <span v-if="sharesAccount(g)">· delas med andra mål</span>
+        </div>
+        <div v-if="!g.plan.done && !g.linked" style="display: flex; gap: 6px">
           <label class="sr-only" :for="'d' + g.i">Belopp att sätta in på {{ g.name }}</label>
           <input :id="'d' + g.i" v-model="deposit[g.i]" class="amount mono" placeholder="belopp" inputmode="numeric" @keydown.enter="addDeposit(g)">
           <button class="btn small" @click="addDeposit(g)">+ Sätt in</button>
@@ -122,7 +133,8 @@ const barColor =(s) => (s === 'over' ? 'var(--warm)' : s === 'warn' ? 'var(--c5)
         <b style="font-size: 16px">Nytt sparmål</b>
         <label>Namn <input v-model="draft.name" placeholder="t.ex. Buffert" required></label>
         <label>Mål (kr) <input v-model="draft.target" class="mono" inputmode="numeric" :placeholder="'t.ex. ' + fmt(Math.round(avgExpenses * 3 / 1000) * 1000)" required></label>
-        <label>Redan sparat (kr) <input v-model="draft.saved" class="mono" inputmode="numeric" placeholder="0"></label>
+        <label v-if="accounts.length">Konto <select v-model="draft.account"><option value="">Inget (fyll i själv)</option><option v-for="a in accounts" :key="a.name">{{ a.name }}</option></select></label>
+        <label v-if="!draft.account">Redan sparat (kr) <input v-model="draft.saved" class="mono" inputmode="numeric" placeholder="0"></label>
         <label>Klart senast (valfritt) <input v-model="draft.deadline" type="month"></label>
         <button class="btn small" type="submit">Skapa mål</button>
         <span class="muted" style="font-size: 12px">Tips: en buffert på tre månaders utgifter är ungefär {{ fmt(Math.round(avgExpenses * 3 / 1000) * 1000) }} kr för dig.</span>
@@ -153,5 +165,5 @@ const barColor =(s) => (s === 'over' ? 'var(--warm)' : s === 'warn' ? 'var(--c5)
 .goal { background: var(--ground); border-radius: 10px; padding: 18px; display: flex; flex-direction: column; gap: 10px; }
 .goal.done { background: var(--good-soft); }
 .goal.new label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
-.goal.new input { border: 1px solid var(--field-border); border-radius: 8px; padding: 8px 10px; background: var(--input-bg); color: var(--ink); font-size: 14px; }
+.goal.new input, .goal.new select {border: 1px solid var(--field-border); border-radius: 8px; padding: 8px 10px; background: var(--input-bg); color: var(--ink); font-size: 14px; }
 </style>

@@ -477,11 +477,12 @@ export function suggestBudgets(txs, overrides) {
 }
 
 // Progress and plan for a savings goal { name, target, saved, deadline? 'YYYY-MM' }.
-export function goalPlan(goal, today, avgSavedPerMonth) {
+// ahead: what goals before it still need from the same savings, so the eta waits for them.
+export function goalPlan(goal, today, avgSavedPerMonth, ahead = 0) {
   const left = Math.max(0, goal.target - goal.saved)
   const monthsLeft = goal.deadline ? (+goal.deadline.slice(0, 4) - +today.slice(0, 4)) * 12 + (+goal.deadline.slice(5, 7) - +today.slice(5, 7)) : null
   const perMonth = monthsLeft === null ? null : left / Math.max(1, monthsLeft)
-  const etaMonths = left === 0 ? 0 : avgSavedPerMonth > 0 ? Math.ceil(left / avgSavedPerMonth) : null
+  const etaMonths = left === 0 ? 0 : avgSavedPerMonth > 0 ? Math.ceil((ahead + left) / avgSavedPerMonth) : null
   let eta = null
   if (etaMonths !== null) { const d = new Date(+today.slice(0, 4), +today.slice(5, 7) - 1 + etaMonths, 1); eta = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` }
   return { left, progress: goal.target ? Math.min(1, goal.saved / goal.target) : 0, monthsLeft, perMonth, eta, done: left === 0 }
@@ -528,6 +529,31 @@ export function accountStats(txs, account, month) {
 // Gain that is more likely money from before the statements than real return: a savings account up over 10 %,
 // or any account with a value but nothing counted as paid in.
 export const gainLooksWrong = (account, s) => !s.estimated && s.gain > 0 && (s.paid <= 0 || (account.type === 'Sparkonto' && s.gainPct > 0.1))
+
+// Plans for all goals, so savings are never counted twice. Goals share a pool: their linked account ({ account: name }),
+// or your overall savings when not linked (or the account is gone). A pool fills its goals in list order, top first:
+// an account's value goes to the first goal up to its target, the rest to the next, and the pace (the account's
+// average deposit, or recentSaved, over the last 6 imported months) reaches a goal only once those above it are done.
+export function planGoals(goals, txs, accounts, today, recentSaved) {
+  const recent = monthsIn(txs).slice(-6), pools = {}
+  return goals.map((g, i) => {
+    const a = g.account && accounts.find((x) => x.name === g.account)
+    const key = a ? a.name : ''
+    if (!pools[key]) {
+      const c = a ? contributions(txs, a) : {}
+      pools[key] = a
+        ? { left: accountValueAt(txs, a, today.slice(0, 7)).value, pace: recent.reduce((s, m) => s + (c[m] || 0), 0) / Math.max(1, recent.length), ahead: 0 }
+        : { left: null, pace: recentSaved, ahead: 0 }
+    }
+    const p = pools[key]
+    const saved = a ? Math.max(0, Math.min(g.target, p.left)) : g.saved
+    if (a) p.left -= saved
+    const goal = { ...g, saved }
+    const plan = goalPlan(goal, today, p.pace, p.ahead)
+    p.ahead += plan.left
+    return { ...goal, i, linked: !!a, pace: p.pace, plan }
+  })
+}
 
 // Net worth per month: bank balance (carried forward) plus every account's value.
 export function netWorthSeries(txs, accounts) {
