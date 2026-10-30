@@ -94,10 +94,10 @@ export function ruleSuggestion(txs, overrides, payee, category) {
   return others.size ? { text: word, category, payees: others.size, count: txs.filter((t) => ruleMatches({ text: word }, t)).length } : null
 }
 
-// The name to show for a transaction: the known service name, else the cleaned merchant.
-export function displayName(text) {
+// The name to show for a transaction: your own name for the payee (names: merchant -> name), else the known service name, else the cleaned merchant.
+export function displayName(text, names = {}) {
   const t = text.toUpperCase()
-  return SERVICES.find((s) => s.match.some((p) => t.includes(p)))?.name ?? title(merchant(text))
+  return names[merchant(text)] || (SERVICES.find((s) => s.match.some((p) => t.includes(p)))?.name ?? title(merchant(text)))
 }
 
 // ---- Reading bank exports ----
@@ -507,11 +507,11 @@ export function contributions(txs, account) {
 
 const sortedSnapshots = (a) => (a.snapshots ?? []).slice().sort((x, y) => x.month.localeCompare(y.month))
 
-// Value at the end of a month: the latest snapshot up to then, else what has been paid in so far (an estimate).
+// Value at the end of a month: the latest snapshot up to then plus deposits since, else what has been paid in so far (an estimate).
 export function accountValueAt(txs, account, month) {
   const snap = sortedSnapshots(account).filter((s) => s.month <= month).at(-1)
   const paid = paidInUntil(txs, account, month)
-  return snap ? { value: snap.value, estimated: false, paid } : { value: paid, estimated: true, paid }
+  return snap ? { value: snap.value + paid - paidInUntil(txs, account, snap.month), estimated: false, paid } : { value: paid, estimated: true, paid }
 }
 
 export function paidInUntil(txs, account, month) {
@@ -524,6 +524,10 @@ export function accountStats(txs, account, month) {
   const snaps = sortedSnapshots(account)
   return { value, estimated, paid, gain: value - paid, gainPct: paid ? (value - paid) / paid : 0, lastSnapshot: snaps.at(-1)?.month ?? null, history: snaps }
 }
+
+// Gain that is more likely money from before the statements than real return: a savings account up over 10 %,
+// or any account with a value but nothing counted as paid in.
+export const gainLooksWrong = (account, s) => !s.estimated && s.gain > 0 && (s.paid <= 0 || (account.type === 'Sparkonto' && s.gainPct > 0.1))
 
 // Net worth per month: bank balance (carried forward) plus every account's value.
 export function netWorthSeries(txs, accounts) {

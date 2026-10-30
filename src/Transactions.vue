@@ -2,14 +2,14 @@
 import { computed, ref } from 'vue'
 import { CATEGORIES, categorize, chosenCategory, merchant, displayName, monthOf, txKey, shiftMonth, monthLong, ruleSuggestion, title } from './logic.js'
 
-const props = defineProps({ txs: Array, overrides: Object, query: String, month: String })
-const emit = defineEmits(['override', 'move', 'add-rule'])
+const props = defineProps({ txs: Array, overrides: Object, names: Object, query: String, month: String })
+const emit = defineEmits(['override', 'move', 'add-rule', 'rename'])
 const onlyMonth = ref(true)
 
 const rows = computed(() => {
   const q = (props.query || '').toLowerCase()
   return props.txs
-    .filter((t) => (!onlyMonth.value || monthOf(t) === props.month) && (!q || t.text.toLowerCase().includes(q) || displayName(t.text).toLowerCase().includes(q) || categorize(t, props.overrides).toLowerCase().includes(q)))
+    .filter((t) => (!onlyMonth.value || monthOf(t) === props.month) && (!q || t.text.toLowerCase().includes(q) || displayName(t.text, props.names).toLowerCase().includes(q) || categorize(t, props.overrides).toLowerCase().includes(q)))
     .slice().reverse()
 })
 const total = computed(() => rows.value.reduce((s, t) => s + t.amount, 0))
@@ -23,6 +23,11 @@ function setCategory(t, category) {
   suggest.value = s && { ...s, payee }
   emit('override', payee, category)
 }
+function rename(t, input) {
+  const name = input.value.trim()
+  emit('rename', merchant(t.text), name)
+  if (!name) input.value = displayName(t.text) // Vue won't redraw an emptied field whose name didn't change
+}
 function makeRule() { emit('add-rule', { text: suggest.value.text, category: suggest.value.category }); suggest.value = null }
 </script>
 
@@ -32,7 +37,7 @@ function makeRule() { emit('add-rule', { text: suggest.value.text, category: sug
       <h2>Transaktioner <span class="muted">{{ rows.length }} rader, netto {{ Math.round(total).toLocaleString('sv-SE') }} kr</span></h2>
       <label style="display: flex; gap: 8px; align-items: center; font-size: 14px; font-weight: 600"><input type="checkbox" v-model="onlyMonth"> Bara vald månad</label>
     </div>
-    <p class="muted" style="margin: 0; font-size: 13px">Ändrar du kategori gäller det alla transaktioner från den mottagaren, även i framtida importer. Välj "Överföring" för pengar mellan dina egna konton så räknas de inte som inkomst eller utgift. Kom en betalning några dagar sent, till exempel hyran, kan du välja vilken månad den räknas till.</p>
+    <p class="muted" style="margin: 0; font-size: 13px">Ändrar du kategori gäller det alla transaktioner från den mottagaren, även i framtida importer. Välj "Överföring" för pengar mellan dina egna konton så räknas de inte som inkomst eller utgift. Kom en betalning några dagar sent, till exempel hyran, kan du välja vilken månad den räknas till. Klicka på ett namn för att byta det, till exempel ett bankgironummer till "Vattenfall". Töm fältet för att återgå.</p>
     <div v-if="suggest" class="suggest note" role="status">
       <span>Du satte <b>{{ title(suggest.payee) }}</b> till {{ suggest.category }}. Gäller det alla mottagare som innehåller <b>{{ suggest.text }}</b>?</span>
       <span style="display: flex; gap: 6px; flex: none">
@@ -46,17 +51,20 @@ function makeRule() { emit('add-rule', { text: suggest.value.text, category: sug
         <tbody>
           <tr v-for="t in rows" :key="txKey(t)">
             <td class="mono muted">{{ t.date }}</td>
-            <td style="font-weight: 600">{{ displayName(t.text) }}<span v-if="moved(t)" class="moved">flyttad</span></td>
+            <td>
+              <label class="sr-only" :for="'n' + txKey(t)">Namn för {{ t.text }}</label>
+              <input :id="'n' + txKey(t)" class="name" :value="displayName(t.text, names)" @change="rename(t, $event.target)"><span v-if="moved(t)" class="moved">flyttad</span>
+            </td>
             <td class="muted" style="font-size: 12px">{{ t.text }}</td>
             <td>
-              <label class="sr-only" :for="'c' + txKey(t)">Kategori för {{ displayName(t.text) }}</label>
+              <label class="sr-only" :for="'c' + txKey(t)">Kategori för {{ displayName(t.text, names) }}</label>
               <select :id="'c' + txKey(t)" class="pill" :class="{ unset: !chosenCategory(t, overrides) }" style="border: 0" :value="chosenCategory(t, overrides)" @change="setCategory(t, $event.target.value)">
                 <option value="" disabled>Välj kategori…</option>
                 <option v-for="c in CATEGORIES" :key="c">{{ c }}</option>
               </select>
             </td>
             <td>
-              <label class="sr-only" :for="'m' + txKey(t)">Månad som {{ displayName(t.text) }} räknas till</label>
+              <label class="sr-only" :for="'m' + txKey(t)">Månad som {{ displayName(t.text, names) }} räknas till</label>
               <select :id="'m' + txKey(t)" class="pill" :class="{ shifted: moved(t) }" style="border: 0" :value="monthOf(t)" @change="emit('move', txKey(t), $event.target.value === booked(t) ? null : $event.target.value)">
                 <option v-for="m in monthChoices(t)" :key="m" :value="m">{{ monthLong(m) }}</option>
               </select>
@@ -71,6 +79,8 @@ function makeRule() { emit('add-rule', { text: suggest.value.text, category: sug
 
 <style scoped>
 .moved { margin-left: 6px; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--link); font-size: 11px; font-weight: 700; }
+.name { border: 1px solid transparent; background: transparent; color: inherit; font: inherit; font-weight: 600; padding: 4px 6px; border-radius: 8px; min-width: 140px; }
+.name:hover, .name:focus { border-color: var(--field-border); background: var(--input-bg); }
 .pill.shifted { background: var(--accent-soft); color: var(--link); }
 .suggest { position: sticky; top: 140px; z-index: 5; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; border: 1px solid var(--note-line); border-radius: 10px; padding: 10px 14px; font-size: 14px; }
 .btn.small { height: 32px; padding: 0 14px; font-size: 13px; }

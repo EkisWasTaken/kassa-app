@@ -39,9 +39,9 @@ const doneCount = computed(() => items.value.filter((i) => i.done).length)
       </div>
     </div>
     <ul v-if="i.count && (i.items || i.details || i.late)" class="list">
-      <li v-for="t in (i.items || []).slice(0, i.id === 'other' ? 25 : 8)" :key="txKey(t)"><span class="mono muted">{{ shortDate(t.date) }}</span> <b>{{ displayName(t.text) }}</b> <span class="mono">{{ fmt(t.amount) }} kr</span>
+      <li v-for="t in (i.items || []).slice(0, i.id === 'other' ? 25 : 8)" :key="txKey(t)"><span class="mono muted">{{ shortDate(t.date) }}</span> <b>{{ displayName(t.text, data.names) }}</b> <span class="mono">{{ fmt(t.amount) }} kr</span>
         <template v-if="i.id === 'other'">
-          <label class="sr-only" :for="'k' + txKey(t)">Kategori för {{ displayName(t.text) }}</label>
+          <label class="sr-only" :for="'k' + txKey(t)">Kategori för {{ displayName(t.text, data.names) }}</label>
           <select :id="'k' + txKey(t)" class="pill unset" style="border: 0; margin-left: 6px" value="" @change="emit('override', merchant(t.text), $event.target.value)">
             <option value="" disabled>Välj kategori…</option>
             <option v-for="c in CATEGORIES" :key="c">{{ c }}</option>
@@ -51,7 +51,7 @@ const doneCount = computed(() => items.value.filter((i) => i.done).length)
       <li v-if="(i.items || []).length > (i.id === 'other' ? 25 : 8)" class="muted">… och {{ i.items.length - (i.id === 'other' ? 25 : 8) }} till, se Transaktioner</li>
       <li v-for="d in i.details || []" :key="d.title + d.body"><b>{{ d.title }}</b> <span class="muted">{{ d.body }}</span></li>
       <li v-for="l in i.late || []" :key="txKey(l.tx)" class="late">
-        <span><b>{{ displayName(l.tx.text) }} {{ shortDate(l.tx.date) }}, {{ fmt(-l.tx.amount) }} kr</b> <span class="muted">{{ monthLong(l.to).split(' ')[0] }} saknar betalningen och {{ monthLong(l.from).split(' ')[0].toLowerCase() }} har två. Ska den räknas till {{ monthLong(l.to).split(' ')[0].toLowerCase() }}?</span></span>
+        <span><b>{{ displayName(l.tx.text, data.names) }} {{ shortDate(l.tx.date) }}, {{ fmt(-l.tx.amount) }} kr</b> <span class="muted">{{ monthLong(l.to).split(' ')[0] }} saknar betalningen och {{ monthLong(l.from).split(' ')[0].toLowerCase() }} har två. Ska den räknas till {{ monthLong(l.to).split(' ')[0].toLowerCase() }}?</span></span>
         <span style="display: flex; gap: 6px; flex: none">
           <button class="btn tiny" @click="emit('move', txKey(l.tx), l.to)">Flytta till {{ monthLong(l.to).split(' ')[0].toLowerCase() }}</button>
           <button class="btn ghost tiny" @click="emit('move', txKey(l.tx), l.from)">Behåll i {{ monthLong(l.from).split(' ')[0].toLowerCase() }}</button>

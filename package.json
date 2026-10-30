@@ -1,6 +1,6 @@
 {
   "name": "kassa",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "main": "electron/main.js",
   "scripts": {
     "test": "node --test src/logic.test.js",

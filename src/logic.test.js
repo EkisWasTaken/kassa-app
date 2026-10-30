@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseCsv, parseAmount, parseDate, decodeText, merchant, categorize, displayName, parseStatement, mergeTx, monthly, subscriptionStats, suggestions, alerts, SERVICES, unusualCharges, checklist, chosenCategory, yearSummary, categoryMatrix, budgetStatus, suggestBudgets, goalPlan, contributions, paidInUntil, accountValueAt, accountStats, netWorthSeries, salaryPayer, incomeBreakdown, latePayments, withMoves, txKey, planInfo, withRules, ruleSuggestion, forecast } from './logic.js'
+import { parseCsv, parseAmount, parseDate, decodeText, merchant, categorize, displayName, parseStatement, mergeTx, monthly, subscriptionStats, suggestions, alerts, SERVICES, unusualCharges, checklist, chosenCategory, yearSummary, categoryMatrix, budgetStatus, suggestBudgets, goalPlan, contributions, paidInUntil, accountValueAt, accountStats, gainLooksWrong, netWorthSeries, salaryPayer, incomeBreakdown, latePayments, withMoves, txKey, planInfo, withRules, ruleSuggestion, forecast } from './logic.js'
 
 const tx = (date, text, amount, balance = 0) => ({ date, text, amount, balance })
 const svc = (name) => ({ ...SERVICES.find((s) => s.name === name), cycle: 'månad' })
@@ -27,6 +27,8 @@ test('displayName maps bank text to real service names', () => {
   assert.equal(displayName('help.hbomax.com,Stockholm,SE'), 'HBO Max')
   assert.equal(displayName('CLAUDE.AI SUBSCRIPTION'), 'Claude')
   assert.equal(displayName('COOP VASASTAN,STOCKHOLM,SE'), 'Coop Vasastan')
+  assert.equal(displayName('5050-1055', { '5050-1055': 'Vattenfall' }), 'Vattenfall') // your own name wins
+  assert.equal(displayName('CLAUDE.AI SUBSCRIPTION', { 'CLAUDE.AI SUBSCRIPTION': 'AI' }), 'AI')
 })
 
 test('parseStatement validates header and rows, skips card reservations', () => {
@@ -192,10 +194,19 @@ test('accountValueAt uses the latest snapshot, else paid-in as an estimate', () 
   const txs = [tx('2026-08-27', 'Överf ISK sparplan', -1500), tx('2026-09-27', 'Överf ISK sparplan', -1500)]
   const a = isk({ snapshots: [{ month: '2026-08', value: 1600 }] })
   assert.deepEqual(accountValueAt(txs, a, '2026-07'), { value: 0, estimated: true, paid: 0 })
-  assert.deepEqual(accountValueAt(txs, a, '2026-09'), { value: 1600, estimated: false, paid: 3000 }) // carried forward
+  assert.deepEqual(accountValueAt(txs, a, '2026-09'), { value: 3100, estimated: false, paid: 3000 }) // snapshot plus later deposits
   const s = accountStats(txs, isk({ snapshots: [{ month: '2026-09', value: 3300 }] }), '2026-09')
   assert.equal(s.gain, 300)
   assert.equal(Math.round(s.gainPct * 100), 10)
+})
+
+test('gainLooksWrong flags money that was there before the statements', () => {
+  const spar = { type: 'Sparkonto' }
+  assert.equal(gainLooksWrong(spar, { estimated: false, gain: 30500, gainPct: 2.5, paid: 12000 }), true)
+  assert.equal(gainLooksWrong(spar, { estimated: false, gain: 500, gainPct: 0.01, paid: 42000 }), false)
+  assert.equal(gainLooksWrong(isk(), { estimated: false, gain: 5000, gainPct: 0.5, paid: 10000 }), false)
+  assert.equal(gainLooksWrong(isk(), { estimated: false, gain: 42000, gainPct: 0, paid: 0 }), true)
+  assert.equal(gainLooksWrong(spar, { estimated: true, gain: 0, gainPct: 0, paid: 0 }), false)
 })
 
 test('netWorthSeries adds month-end bank balance and account values', () => {

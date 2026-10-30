@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import Chart from './Chart.vue'
 import Spark from './Spark.vue'
-import { netWorthSeries, accountStats, savingsTransfers, monthShort, monthLong, fmt, title } from './logic.js'
+import { netWorthSeries, accountStats, gainLooksWrong, savingsTransfers, monthsIn, monthShort, monthLong, fmt, title } from './logic.js'
 
 const props = defineProps({ data: Object })
 const emit = defineEmits(['add-account', 'update-account', 'remove-account'])
@@ -24,6 +24,8 @@ const totals = computed(() => {
   return { value, paid, gain: value - paid, pct: paid ? (value - paid) / paid : 0 }
 })
 const transfers = computed(() => savingsTransfers(props.data.tx, props.data.overrides))
+// What "insatt före" means in practice: the balance on the day the oldest imported statement starts.
+const startLabel = computed(() => { const m = monthsIn(props.data.tx)[0]; return m ? 'Saldo 1 ' + monthLong(m).toLowerCase() : 'Insatt före dina kontoutdrag' })
 
 const kpis = computed(() => [
   { l: 'Nettoförmögenhet', v: fmt(last.value?.total ?? 0), d: prev.value ? `${signed(last.value.total - prev.value.total)} sedan ${monthShort(prev.value.month)}` : '' },
@@ -125,6 +127,7 @@ function addAccount() {
         <div><div class="muted" style="font-size: 12px; font-weight: 600">Insatt</div><div class="mono" style="font-size: 16px">{{ fmt(a.s.paid) }}</div></div>
         <div v-if="!a.s.estimated"><div class="muted" style="font-size: 12px; font-weight: 600">Avkastning</div>
           <div class="mono" :style="{ fontSize: '16px', color: a.s.gain >= 0 ? 'var(--good-text)' : 'var(--warm-text)' }">{{ signed(a.s.gain) }} ({{ pct1(a.s.gainPct) }})</div></div>
+        <p v-if="gainLooksWrong(a, a.s)" class="flag" role="status" style="margin: 0">Hög avkastning – har du fyllt i {{ startLabel.toLowerCase() }} nedan?</p>
         <div v-if="a.s.history.length > 1" style="flex: 1; min-width: 120px"><Spark :values="a.s.history.map((h) => h.value)" color="var(--accent)" /></div>
       </div>
 
@@ -134,7 +137,7 @@ function addAccount() {
           <option value="">Inga</option>
           <option v-for="t in transfers" :key="t.name" :value="t.name">{{ title(t.name) }}</option>
         </select>
-        <label :for="'p' + a.i">· insatt före Kassa:</label>
+        <label :for="'p' + a.i">· {{ startLabel.toLowerCase() }}:</label>
         <input :id="'p' + a.i" class="mono small-in" :value="a.startPaidIn || 0" inputmode="numeric" @change="emit('update-account', a.i, { startPaidIn: num($event.target.value) || 0 })"> kr
         <span>· {{ a.s.lastSnapshot ? 'värde senast angivet ' + monthLong(a.s.lastSnapshot).toLowerCase() : 'inget värde angivet än' }}</span>
       </div>
@@ -173,7 +176,8 @@ function addAccount() {
           <option v-for="t in transfers" :key="t.name" :value="t.name">{{ title(t.name) }} · {{ fmt(t.total) }} kr totalt</option>
         </select>
       </label>
-      <label>Insatt före dina kontoutdrag (kr) <input v-model="draft.startPaidIn" class="mono" inputmode="numeric" placeholder="0"></label>
+      <label>{{ startLabel }} (kr) <input v-model="draft.startPaidIn" class="mono" inputmode="numeric" placeholder="0"></label>
+      <p class="muted" style="margin: 0; font-size: 12px">Det som fanns på kontot innan ditt äldsta kontoutdrag. 0 om kontot är nytt.</p>
       <label>Värde idag (kr) <input v-model="draft.value" class="mono" inputmode="numeric" placeholder="valfritt"></label>
       <button class="btn small" type="submit">Lägg till konto</button>
     </form>

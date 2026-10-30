@@ -24,7 +24,7 @@ const OLD_CATS = { Housing: 'Boende', 'Insurance & loans': 'Försäkring & lån'
   'Phone & internet': 'Telefon & internet', 'Clubs & fitness': 'Föreningar & träning', Food: 'Mat', Restaurants: 'Restaurang & café',
   Travel: 'Resor', Bills: 'Räkningar', Transfer: 'Överföring', Other: 'Övrigt' }
 
-const EMPTY = () => ({ tx: [], overrides: {}, goal: 0.15, subs: [], dismissed: [], checked: {}, budgets: {}, goals: [], accounts: [], moves: {}, rules: [] })
+const EMPTY = () => ({ tx: [], overrides: {}, goal: 0.15, subs: [], dismissed: [], checked: {}, budgets: {}, goals: [], accounts: [], moves: {}, rules: [], names: {} })
 const data = ref(EMPTY())
 const loaded = ref(false)
 const loadError = ref('')
@@ -121,7 +121,9 @@ const addAccount = (a) => change((d) => { d.accounts.push(a) })
 const updateAccount = (i, patch) => change((d) => { Object.assign(d.accounts[i], patch) })
 const removeAccount = (i) => change((d) => { d.accounts.splice(i, 1) }, `Kontot ${data.value.accounts[i].name} borttaget`)
 const setMove = (key, m) => change((d) => { const { [key]: _, ...rest } = d.moves; d.moves = m ? { ...rest, [key]: m } : rest },
-  `${displayName(key.split('|')[1])} räknas nu till ${monthLong(m ?? key.slice(0, 7)).toLowerCase()}`)
+  `${displayName(key.split('|')[1], data.value.names)} räknas nu till ${monthLong(m ?? key.slice(0, 7)).toLowerCase()}`)
+const setName = (m, name) => change((d) => { const { [m]: _, ...rest } = d.names; d.names = name ? { ...rest, [m]: name } : rest },
+  name ? `${title(m)} heter nu ${name}` : `${title(m)} har sitt vanliga namn igen`)
 const addRule = (r) => change((d) => { d.rules = [...d.rules, r] }, `Regel skapad: ${r.text} blir ${r.category}`)
 const removeRule = (i) => change((d) => { d.rules = d.rules.filter((_, j) => j !== i) }, `Regeln för ${data.value.rules[i].text} borttagen`)
 
@@ -186,7 +188,7 @@ function search() { if (query.value) tab.value = 'Transaktioner' }
       <Year v-else-if="tab === 'År'" :data="view" />
       <Investments v-else-if="tab === 'Investeringar'" :data="view" @add-account="addAccount" @update-account="updateAccount" @remove-account="removeAccount" />
       <Budget v-else-if="tab === 'Budget'" :data="view" :month="month" @set-budgets="setBudgets" @set-rate="setRate" @add-goal="addGoal" @update-goal="updateGoal" @remove-goal="removeGoal" />
-      <Transactions v-else-if="tab === 'Transaktioner'" :txs="view.tx" :overrides="data.overrides" :query="query" :month="month" @override="setOverride" @move="setMove" @add-rule="addRule" />
+      <Transactions v-else-if="tab === 'Transaktioner'" :txs="view.tx" :overrides="data.overrides" :names="data.names" :query="query" :month="month" @override="setOverride" @move="setMove" @add-rule="addRule" @rename="setName" />
       <Subscriptions v-else-if="tab === 'Prenumerationer'" :data="view" @add="addSub" @dismiss="dismiss" @undismiss="undismiss" @update="updateSub" @remove="removeSub" />
     </template>
   </main>

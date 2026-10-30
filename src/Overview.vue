@@ -278,7 +278,7 @@ const ringDash = computed(() => { const C = 2 * Math.PI * 62; return `${(C * Mat
           <tbody>
             <tr v-for="t in recentTx" :key="txKey(t)">
               <td class="mono muted">{{ shortDate(t.date) }}</td>
-              <td style="font-weight: 600">{{ displayName(t.text) }}<span v-if="doubleKeys.has(txKey(t))" class="flag">möjlig dubbelbetalning</span></td>
+              <td style="font-weight: 600">{{ displayName(t.text, data.names) }}<span v-if="doubleKeys.has(txKey(t))" class="flag">möjlig dubbelbetalning</span></td>
               <td><span class="pill">{{ categorize(t, ov) }}</span></td>
               <td class="num">{{ t.amount.toLocaleString('sv-SE', { minimumFractionDigits: 2 }) }}</td>
             </tr>
